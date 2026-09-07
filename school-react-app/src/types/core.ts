@@ -8,7 +8,7 @@
 
 // Parent is an obsolete role and was removed from the application. Legacy
 // parent accounts cannot sign in and have no routes or navigation.
-export type Role = "owner" | "super_admin" | "admin" | "teacher" | "student";
+export type Role = "super_admin" | "admin" | "teacher" | "student";
 
 export type AppName = "school" | "super_admin";
 
