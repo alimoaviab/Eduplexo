@@ -17,7 +17,6 @@ import {
   adminRoutes,
   teacherRoutes,
   studentRoutes,
-  ownerRoutes,
 } from "./generated-routes";
 
 // Auth pages are small and critical-path — keep them eager
@@ -145,23 +144,7 @@ export const router = createBrowserRouter([
         ],
       },
 
-      // ─── Owner ─────────────────────────────────────────────────────────
-      // The Owner role has its OWN independent route tree. Admin routes are
-      // never mapped into /owner/* — Owner is a governance role, not an
-      // operator, and /admin/* is unreachable for it both here and in the
-      // backend authorization layer.
-      {
-        element: <ProtectedRoute allowedRoles={["owner"]} />,
-        children: [
-          { path: "/owner", element: <Navigate to="/owner/dashboard" replace /> },
-          ...ownerRoutes,
-        ],
-      },
-
       // ─── Admin ─────────────────────────────────────────────────────────
-      // Owner is deliberately NOT in the allow-list: an Owner manually
-      // entering /admin/* is bounced to their own dashboard by
-      // ProtectedRoute, and every Admin API rejects the Owner role with 403.
       {
         element: <ProtectedRoute allowedRoles={["admin", "super_admin"]} />,
         children: [
