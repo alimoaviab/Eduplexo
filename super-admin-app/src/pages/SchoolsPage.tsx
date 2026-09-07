@@ -105,8 +105,8 @@ export function SchoolsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Registered Owners & Institutions</h1>
-          <p className="text-xs text-slate-500 mt-0.5">{schools.length} registered owners & subscriber accounts</p>
+          <h1 className="text-xl font-bold text-slate-900">Registered Schools & Institutions</h1>
+          <p className="text-xs text-slate-500 mt-0.5">{schools.length} registered schools & subscriber accounts</p>
         </div>
       </div>
 
@@ -118,7 +118,7 @@ export function SchoolsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && loadSchools()}
-            placeholder="Search owners or schools..."
+            placeholder="Search schools..."
             className="w-full h-8 pl-9 pr-3 rounded-lg border border-slate-200 text-[12px] outline-none focus:border-blue-500"
           />
         </div>
@@ -141,17 +141,17 @@ export function SchoolsPage() {
       {/* Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
         {loading ? (
-          <div className="p-12 text-center text-sm text-slate-400">Loading registered owners...</div>
+          <div className="p-12 text-center text-sm text-slate-400">Loading registered schools...</div>
         ) : schools.length === 0 ? (
           <div className="p-16 text-center">
             <AppIcon name="Users" size={36} className="text-slate-200 mb-3" />
-            <p className="text-sm font-medium text-slate-500">No registered owners found</p>
+            <p className="text-sm font-medium text-slate-500">No registered schools found</p>
           </div>
         ) : (
           <table className="w-full">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
-                <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Owner & Institution</th>
+                <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">School & Administrator</th>
                 <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Plan</th>
                 <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">License / Trial Remaining</th>
                 <th className="text-center px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>

@@ -3,10 +3,10 @@
  * mobile app and web app speak to the same backend identically.
  */
 
-export type Role = 'owner' | 'super_admin' | 'admin' | 'teacher' | 'student';
+export type Role = 'super_admin' | 'admin' | 'teacher' | 'student';
 
-/** UI tabs offer these options including owner. */
-export type LoginRole = 'owner' | 'admin' | 'teacher' | 'student';
+/** UI tabs offer these options: Admin, Teacher, Student. */
+export type LoginRole = 'admin' | 'teacher' | 'student';
 
 export interface AuthTokenPayload {
   sub: string;
