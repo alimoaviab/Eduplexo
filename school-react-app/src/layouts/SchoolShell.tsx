@@ -46,9 +46,6 @@ type NavGroup = {
   items: NavItem[];
 };
 
-const ownerNavGroups: NavGroup[] = [
-
-
 const adminNavGroups: NavGroup[] = [
   {
     label: "Reports",
@@ -194,9 +191,6 @@ const studentNavGroups: NavGroup[] = [
 
 function navGroupsForRole(role: Role | undefined): NavGroup[] {
   if (!role) return [];
-  // Owner gets ONLY the Owner navigation — Dashboard, My Schools, Subscription.
-  // Admin modules are never mapped into the Owner sidebar.
-  if (role === "owner") return ownerNavGroups;
   if (role === "admin" || role === "super_admin") return adminNavGroups;
   if (role === "teacher") return teacherNavGroups;
   if (role === "student") return studentNavGroups;
@@ -403,7 +397,7 @@ export function SchoolShell({ children, title, eyebrow, description, actions }: 
   const isExpiringSoon = daysRemaining !== null && daysRemaining <= 3;
   const isExpired = daysRemaining !== null && daysRemaining <= 0;
   const graceDaysRemaining = daysRemaining !== null ? Math.max(0, 3 + daysRemaining) : 0;
-  const showRenewalPopup = !isRenewalDismissed && isExpiringSoon && (user?.role === "owner" || user?.role === "admin");
+  const showRenewalPopup = !isRenewalDismissed && isExpiringSoon && (user?.role === "admin" || user?.role === "super_admin");
 
   const navGroups = useMemo(() => navGroupsForRole(user?.role), [user]);
 
@@ -717,7 +711,7 @@ export function SchoolShell({ children, title, eyebrow, description, actions }: 
                   {isExpired ? `${graceDaysRemaining}d grace` : `${daysRemaining}d left`}
                 </span>
                 <Link
-                  to={user?.role === "owner" ? "/owner/subscription" : "/admin/subscription"}
+                  to="/admin/subscription"
                   className={`px-2 py-0.5 rounded-lg text-[10px] font-black text-white shadow-xs transition-transform active:scale-95 ${
                     isExpired ? "bg-rose-600 hover:bg-rose-700" : "bg-amber-600 hover:bg-amber-700"
                   }`}
