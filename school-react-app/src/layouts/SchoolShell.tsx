@@ -197,7 +197,7 @@ function navGroupsForRole(role: Role | undefined): NavGroup[] {
   return [];
 }
 
-function AdminActions({ allowedModules, subscription, rolePrefix }: { allowedModules: Record<string, boolean> | null; subscription: any; rolePrefix?: string }) {
+function AdminActions({ allowedModules, subscription }: { allowedModules: Record<string, boolean> | null; subscription: any }) {
   const actions = [
     { label: "Student", icon: "person_add", href: "/admin/students?action=new", color: "text-blue-600 border-blue-200 hover:bg-blue-50", module: "students" },
     { label: "Attendance", icon: "how_to_reg", href: "/admin/attendance", color: "text-blue-600 border-blue-200 hover:bg-blue-50", module: "attendance" },
@@ -223,7 +223,7 @@ function AdminActions({ allowedModules, subscription, rolePrefix }: { allowedMod
       {filteredActions.map((action) => (
         <Link
           key={action.label}
-          to={toRolePath(action.href, rolePrefix)}
+          to={action.href}
           className={`flex items-center gap-1.5 px-3 py-1 rounded-full border bg-white transition-all hover:scale-[1.02] active:scale-[0.98] ${action.color} shadow-sm`}
         >
           <AppIcon name={action.icon} size={15} />
@@ -232,12 +232,12 @@ function AdminActions({ allowedModules, subscription, rolePrefix }: { allowedMod
       ))}
       <div className="flex gap-1 ml-1">
         {(!shouldFilter || !allowedModules || allowedModules["results"] !== false) && (
-          <Link to={toRolePath("/admin/results", rolePrefix)} className="p-1 rounded-full text-slate-400 hover:text-blue-600 hover:bg-slate-50 transition-all" title="Results">
+          <Link to="/admin/results" className="p-1 rounded-full text-slate-400 hover:text-blue-600 hover:bg-slate-50 transition-all" title="Results">
             <AppIcon name="Leaderboard" size={18} />
           </Link>
         )}
         {(!shouldFilter || !allowedModules || allowedModules["timetable"] !== false) && (
-          <Link to={toRolePath("/admin/timetable", rolePrefix)} className="p-1 rounded-full text-slate-400 hover:text-blue-600 hover:bg-slate-50 transition-all" title="Timetable">
+          <Link to="/admin/timetable" className="p-1 rounded-full text-slate-400 hover:text-blue-600 hover:bg-slate-50 transition-all" title="Timetable">
             <AppIcon name="CalendarDays" size={18} />
           </Link>
         )}
@@ -777,7 +777,6 @@ export function SchoolShell({ children, title, eyebrow, description, actions }: 
                 <AdminActions 
                   allowedModules={allowedModules} 
                   subscription={subscription} 
-                  rolePrefix={getRolePrefix(pathname, user.role)} 
                 />
               )}
             </div>
