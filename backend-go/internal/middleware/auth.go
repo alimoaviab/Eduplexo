@@ -152,23 +152,11 @@ func Authenticator(cfg config.Config, s *store.MemStore, revoker session.Revoker
 			}
 
 			// Global school context switching via x-school-id is reserved for
-			// Super Admin (and the sentinel system/global scopes). The Owner
-			// role is deliberately NOT allowed to switch context: Owner stays
-			// an Owner everywhere, and Owner endpoints resolve school scope
-			// from the OwnerSchools ownership table on the server. Removing
-			// this branch eliminates the Owner→Admin context-switch vector.
+			// Super Admin (and the sentinel system/global scopes).
 			if sch := strings.TrimSpace(r.Header.Get("x-school-id")); sch != "" && sch != "undefined" && sch != "null" {
 				if ctx.Role == "super_admin" || sch == "system" || sch == "__global__" {
 					ctx.SchoolID = sch
 				}
-			}
-
-			// Owners are never scoped to a school through their token or any
-			// client-supplied header. Forcing the sentinel scope means shared
-			// school-scoped handlers (search, dashboard, academic years, ...)
-			// can never see a tenant's data under an Owner identity.
-			if ctx.Role == "owner" {
-				ctx.SchoolID = "system"
 			}
 
 			// Support global branch/campus context switching

@@ -11,12 +11,28 @@ import (
 
 func signupBody(email string) []byte {
 	b, _ := json.Marshal(map[string]any{
-		"fullName": "OTP Abuse Tester",
-		"email":    email,
+		"fullName":   "OTP Abuse Tester",
+		"schoolName": "Abuse Test School",
+		"email":      email,
+		"password":   "Password123!",
+		"role":       "admin",
+	})
+	return b
+}
+
+func TestSignup_OwnerRoleRejected(t *testing.T) {
+	h, _, _ := setupTestAuthHandler()
+	body, _ := json.Marshal(map[string]any{
+		"fullName": "Legacy Owner Attempt",
+		"email":    "legacy_owner@example.com",
 		"password": "Password123!",
 		"role":     "owner",
 	})
-	return b
+	w := httptest.NewRecorder()
+	h.Signup(w, httptest.NewRequest("POST", "/api/auth/signup", bytes.NewReader(body)))
+	if w.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for owner signup, got %d", w.Result().StatusCode)
+	}
 }
 
 func TestSignup_RepeatedSubmissionRespectsCooldown(t *testing.T) {

@@ -29,7 +29,6 @@ import (
 	"github.com/eduplexo/backend-go/internal/domain/liveclass"
 	"github.com/eduplexo/backend-go/internal/domain/messaging"
 	"github.com/eduplexo/backend-go/internal/domain/notifications"
-	"github.com/eduplexo/backend-go/internal/domain/owner"
 	"github.com/eduplexo/backend-go/internal/domain/packages"
 	"github.com/eduplexo/backend-go/internal/domain/questionpapers"
 	"github.com/eduplexo/backend-go/internal/domain/results"
@@ -170,35 +169,6 @@ func Router(cfg config.Config, s *store.MemStore, pg *persistence.Persister, rdb
 			r.Patch("/academic-years/{id}", ayH.Update)
 			r.Delete("/academic-years/{id}", ayH.Delete)
 			r.Post("/academic-years/switch", authH.SwitchAcademicYear)
-
-			// ─── Owner ERP ──────────────────────────────────────────────────────
-			owH := owner.NewPG(cfg, s, saveFn, pg.RuntimePool())
-			r.Get("/owner/dashboard", owH.DashboardStats)
-			r.Get("/owner/schools", owH.GetSchools)
-			r.Post("/owner/schools", owH.CreateSchool)
-			r.Post("/owner/schools/create", owH.CreateSchool) // backward compat
-			r.Patch("/owner/schools/{id}", owH.UpdateSchool)
-			r.Delete("/owner/schools/{id}", owH.DeleteSchool)
-			r.Post("/owner/schools/{id}/{action}", owH.SchoolAction)
-			r.Get("/owner/campuses", owH.ListCampuses)
-			r.Get("/campuses", owH.ListCampuses)
-			r.Post("/owner/campuses", owH.CreateCampus)
-			r.Patch("/owner/campuses/{id}", owH.UpdateCampus)
-			r.Delete("/owner/campuses/{id}", owH.DeleteCampus)
-			r.Get("/owner/admins", owH.ListAdmins)
-			r.Post("/owner/admins", owH.CreateAdmin)
-			r.Patch("/owner/admins/{id}", owH.UpdateAdmin)
-			r.Delete("/owner/admins/{id}", owH.DeleteAdmin)
-			r.Get("/owner/subscriptions", owH.ListSubscriptions)
-			r.Get("/owner/analytics", owH.Analytics)
-			r.Get("/owner/ledger", owH.Ledger)
-			r.Get("/owner/finance", owH.Finance)
-			r.Get("/owner/alerts", owH.Alerts)
-			r.Get("/owner/budgets", owH.ListBudgets)
-			r.Post("/owner/budgets", owH.CreateBudget)
-			r.Patch("/owner/budgets/{id}", owH.UpdateBudget)
-			r.Delete("/owner/budgets/{id}", owH.DeleteBudget)
-			r.Get("/owner/notifications", owH.Notifications)
 
 			edxH := eduplexoextension.New(s, saveFn)
 			r.Get("/eduplexo-extension/auth/current", edxH.CurrentUser)

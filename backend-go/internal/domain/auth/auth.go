@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -154,11 +155,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The Parent role is obsolete and no longer an active application role.
-	// Legacy parent accounts must not be able to sign in (their credentials
-	// remain stored for historical compatibility only). Respond with the
-	// generic message so account existence is not revealed.
-	if user.Role == "parent" {
+	// The Parent and Owner roles are obsolete and no longer active
+	// application roles. Legacy accounts must not be able to sign in (their
+	// credentials remain stored for historical compatibility only). Respond
+	// with the generic message so account existence is not revealed.
+	if user.Role == "parent" || user.Role == "owner" {
 		api.WriteJSON(w, http.StatusUnauthorized, map[string]any{
 			"ok":      false,
 			"message": "Invalid email or password",
@@ -174,10 +175,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.Status == "locked" || (user.Status == "suspended" && user.Role != "owner") {
+	if user.Status == "locked" || user.Status == "suspended" {
 		api.WriteJSON(w, http.StatusForbidden, map[string]any{
 			"ok":      false,
-			"message": "Your school subscription is currently inactive. Please contact the Owner to renew the EduPlexo subscription.",
+			"message": "Your school subscription is currently inactive. Please renew the EduPlexo subscription.",
 			"error": map[string]any{
 				"code":          "ACCOUNT_SUSPENDED",
 				"support_phone": "+92 306 4944326",
@@ -186,16 +187,16 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3-day grace period check for owners and admins
-	if (user.Role == "owner" || user.Role == "admin") && h.Pool != nil {
+	// 3-day grace period check for the school's admin
+	if user.Role == "admin" && h.Pool != nil {
 		var endDate *time.Time
 		var subStatus string
 		err := h.Pool.QueryRow(r.Context(), `
 			SELECT end_date, status FROM subscriptions 
-			WHERE (school_id = $1 OR school_id IN (SELECT school_id FROM schools WHERE owner_email = $2 OR owner_user_id = $3))
+			WHERE school_id = $1
 			  AND status != 'cancelled'
 			ORDER BY created_at DESC LIMIT 1
-		`, user.SchoolID, user.Email, user.ID).Scan(&endDate, &subStatus)
+		`, user.SchoolID).Scan(&endDate, &subStatus)
 
 		if err == nil && endDate != nil {
 			daysOverdue := int(time.Since(*endDate).Hours() / 24)
@@ -218,7 +219,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	// Check school status for non-super_admin users — same logic as the
 	// original: only admin/teacher/parent/student users care about school
 	// state, and the messages are preserved verbatim.
-	if user.Role != "super_admin" && user.Role != "owner" {
+	if user.Role != "super_admin" {
 		h.Store.RLock()
 		var school *store.School
 		for _, s := range h.Store.Schools {
@@ -274,7 +275,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		if !activeSub {
 			for _, s := range h.Store.Schools {
 				if s.SchoolID == user.SchoolID {
-					if s.Status == "active" || s.ApprovalStatus == "approved" || s.OwnerUserID != "" || s.OwnerEmail != "" {
+					if s.Status == "active" || s.ApprovalStatus == "approved" {
 						activeSub = true
 					}
 					break
@@ -286,7 +287,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		if !activeSub && user.SchoolID != "__global__" && user.SchoolID != "system" {
 			api.WriteJSON(w, http.StatusForbidden, map[string]any{
 				"ok":      false,
-				"message": "Your school subscription has expired or is inactive. Please contact the school owner to renew.",
+				"message": "Your school subscription has expired or is inactive. Please renew the subscription.",
 				"error": map[string]any{
 					"code": "SUBSCRIPTION_EXPIRED",
 				},
@@ -412,10 +413,10 @@ type changeEmailRequest struct {
 }
 
 // Signup implements POST /api/auth/signup. Mirrors the Node route file.
-// For role="admin"/"owner": creates an Owner user with "system" scope (no default school).
-// For other roles: looks up the school by its school_id/code, validates,
-// creates the user, signs a token, sets the cookie, and returns 201 with
-// the token.
+// For role="admin" (the default): school onboarding — reserves the School
+// now and creates its School Admin once the email OTP is verified. No Owner
+// account is ever created.
+// For teacher/student: joins an existing school via its code.
 func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	var body signupRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -425,23 +426,25 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 
 	role := strings.ToLower(strings.TrimSpace(body.Role))
 	if role == "" {
-		role = "owner"
+		role = "admin"
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))
 	password := body.Password
 	fullName := strings.TrimSpace(firstNonEmpty(body.AdminName, body.FullName))
 	schoolCode := strings.ToUpper(strings.TrimSpace(firstNonEmpty(body.SchoolCode, body.SchoolCode2)))
+	schoolName := strings.TrimSpace(firstNonEmpty(body.SchoolName, body.SchoolName2))
 
 	// Self-service role policy (security invariant):
-	//   - owner        → new platform customer; creates their own school
+	//   - admin          → school onboarding: creates School + School Admin
 	//   - teacher/student → join an existing school via its code
-	//   - admin        → must be provisioned by an owner or super-admin
-	//                    (owner.CreateAdmin / owner.CreateSchool). Admin
-	//                    self-registration is never allowed: it would let
-	//                    anyone mint a wildcard-permission tenant admin.
-	//   - super_admin  → fully denied (never in the allowlist).
-	//   - parent       → obsolete role; no longer accepted anywhere.
-	if role != "teacher" && role != "student" && role != "owner" {
+	//   - owner          → RETIRED role: never creatable, never assignable.
+	//   - super_admin    → fully denied (never in the allowlist).
+	//   - parent         → obsolete role; no longer accepted anywhere.
+	if role == "owner" {
+		api.WriteJSON(w, http.StatusBadRequest, signupErr("Owner accounts are no longer available. Please create a school administrator account instead."))
+		return
+	}
+	if role != "teacher" && role != "student" && role != "admin" {
 		api.WriteJSON(w, http.StatusBadRequest, signupErr("Invalid role selected"))
 		return
 	}
@@ -449,8 +452,12 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		api.WriteJSON(w, http.StatusBadRequest, signupErr("All fields are required"))
 		return
 	}
-	if role != "owner" && schoolCode == "" {
+	if (role == "teacher" || role == "student") && schoolCode == "" {
 		api.WriteJSON(w, http.StatusBadRequest, signupErr("School code is required"))
+		return
+	}
+	if role == "admin" && schoolName == "" {
+		api.WriteJSON(w, http.StatusBadRequest, signupErr("School name is required"))
 		return
 	}
 	emailRegex := regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
@@ -486,7 +493,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 
 	schoolID := "system"
-	if role != "admin" && role != "owner" {
+	if role == "teacher" || role == "student" {
 		h.Store.RLock()
 		var school *store.School
 		for _, s := range h.Store.Schools {
@@ -502,84 +509,95 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		}
 		schoolID = school.SchoolID
 	}
-
-	// ─── Super Admin Bypass: Skip OTP Direct Account Creation ──────────
-	// Security invariant: this fast path exists ONLY for platform operators
-	// who are authenticated as super_admin and are provisioning a new OWNER
-	// account (onboarding). It must never be reachable by anonymous callers:
-	// an unauthenticated attacker could otherwise mint a privileged account
-	// with wildcard permissions. Anonymous signups always proceed through
-	// email OTP verification regardless of the SkipOTP flag.
-	if role == "owner" && superadmin.GetPlatformSettings().SkipOTP && h.isSuperAdminRequest(r) {
-		userID := store.NewID("usr")
-
-		newUser := &store.User{
-			ID:           userID,
-			SchoolID:     schoolID,
-			Email:        email,
-			PasswordHash: hash,
-			Role:         role,
-			Permissions:  []string{"*"},
-			Profile: store.UserProfile{
-				FirstName: firstWord(fullName),
-				LastName:  remainingWords(fullName),
-				Phone:     body.Phone,
-			},
-			Status:    "active",
-			CreatedAt: now,
-			UpdatedAt: now,
+	if role == "admin" {
+		// Reserve the school shell now so the code is unique from the first
+		// request; it is activated when the OTP is verified. Never an Owner.
+		school, err := h.createSchoolShell(schoolName, schoolCode, body.Phone)
+		if err != nil {
+			api.WriteJSON(w, http.StatusConflict, signupErr(err.Error()))
+			return
 		}
+		schoolID = school.SchoolID
 
-		h.Store.Lock()
-		for _, u := range h.Store.Users {
-			if strings.EqualFold(u.Email, email) {
-				h.Store.Unlock()
-				api.WriteJSON(w, http.StatusConflict, signupErr("This email is already registered in the system."))
-				return
+		// Super Admin provisioning bypass: if SkipOTP is enabled and the request
+		// is from an authenticated super_admin, immediately activate the school
+		// and admin user without requiring email OTP verification.
+		if superadmin.GetPlatformSettings().SkipOTP && h.isSuperAdminRequest(r) {
+			userID := store.NewID("usr")
+			newUser := &store.User{
+				ID:           userID,
+				SchoolID:     schoolID,
+				Email:        email,
+				PasswordHash: hash,
+				Role:         "admin",
+				Permissions:  []string{},
+				Profile: store.UserProfile{
+					FirstName: firstWord(fullName),
+					LastName:  remainingWords(fullName),
+					Phone:     body.Phone,
+				},
+				Status:    "active",
+				CreatedAt: now,
+				UpdatedAt: now,
 			}
-		}
-		h.Store.Users = append(h.Store.Users, newUser)
-		h.Store.Unlock()
 
-		h.Persist("users", newUser)
+			h.Store.Lock()
+			school.Status = "active"
+			school.UpdatedAt = now
+			h.Store.Users = append(h.Store.Users, newUser)
+			trial := &store.Subscription{
+				ID:           store.NewID("sub"),
+				SchoolID:     schoolID,
+				PackageID:    "trial",
+				StudentLimit: 500,
+				Status:       "trial",
+				NextRenewal:  now.AddDate(0, 0, 14),
+				CreatedAt:    now,
+				UpdatedAt:    now,
+			}
+			h.Store.Subscriptions = append(h.Store.Subscriptions, trial)
+			h.Store.Unlock()
 
-		// Authoritatively establish the 14-day trial in PG so Super Admin and Owner agree immediately
-		if newUser.Role == "owner" && h.Pool != nil {
-			_ = subscription.EnsureOwnerTrial(r.Context(), h.Pool, newUser.ID)
-		}
+			h.Persist("schools", school)
+			h.Persist("users", newUser)
+			h.Persist("subscriptions", trial)
 
-		// Generate authenticated JWT session
-		claims := authpkg.Claims{
-			SchoolID:             schoolID,
-			Role:                 newUser.Role,
-			Permissions:          newUser.Permissions,
-			ActiveAcademicYearID: "",
-			SessionID:            "sess_" + randomID(),
-			App:                  h.Cfg.AppName,
-			ActorEmail:           newUser.Email,
-		}
-		claims.Subject = newUser.ID
-		token, err := authpkg.SignToken(h.Cfg.JWTSecret, h.Cfg.AppName, claims, rememberTokenTTL)
-		if err == nil {
-			h.setSessionCookie(w, token, true)
-		}
+			if h.Pool != nil {
+				_ = subscription.EnsureSchoolTrial(r.Context(), h.Pool, schoolID)
+			}
 
-		api.WriteJSON(w, http.StatusCreated, map[string]any{
-			"ok":          true,
-			"success":     true,
-			"skipped_otp": true,
-			"message":     "Account created successfully! Welcome to EduPlexo.",
-			"data": map[string]any{
-				"status":                  "active",
-				"school_id":               schoolID,
-				"token":                   token,
-				"role":                    newUser.Role,
-				"email":                   newUser.Email,
-				"user_id":                 newUser.ID,
-				"active_academic_year_id": "",
-			},
-		})
-		return
+			claims := authpkg.Claims{
+				SchoolID:             schoolID,
+				Role:                 newUser.Role,
+				Permissions:          newUser.Permissions,
+				ActiveAcademicYearID: "",
+				SessionID:            "sess_" + randomID(),
+				App:                  h.Cfg.AppName,
+				ActorEmail:           newUser.Email,
+			}
+			claims.Subject = newUser.ID
+			token, err := authpkg.SignToken(h.Cfg.JWTSecret, h.Cfg.AppName, claims, rememberTokenTTL)
+			if err == nil {
+				h.setSessionCookie(w, token, true)
+			}
+
+			api.WriteJSON(w, http.StatusCreated, map[string]any{
+				"ok":          true,
+				"success":     true,
+				"skipped_otp": true,
+				"message":     "Account created successfully! Welcome to EduPlexo.",
+				"data": map[string]any{
+					"status":                  "active",
+					"school_id":               schoolID,
+					"token":                   token,
+					"role":                    newUser.Role,
+					"email":                   newUser.Email,
+					"user_id":                 newUser.ID,
+					"active_academic_year_id": "",
+				},
+			})
+			return
+		}
 	}
 
 	// ─── Phase: Secure 6-Digit Email OTP Verification ──────────────────
@@ -783,13 +801,13 @@ func (h *Handler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Admin self-registration is permanently disallowed, including any
-	// legacy pending signups created before the policy was enforced.
-	if pending.Role == "admin" {
-		pending.Status = "consumed"
+	// The Owner role is retired: legacy pending owner signups (pre-migration)
+	// must never become active accounts.
+	if pending.Role == "owner" {
+		pending.Status = "expired"
 		h.Store.Unlock()
 		h.Persist("pending_signups", pending)
-		api.WriteJSON(w, http.StatusBadRequest, signupErr("Admin accounts cannot be self-registered. Please contact the school owner."))
+		api.WriteJSON(w, http.StatusBadRequest, signupErr("Owner accounts are no longer available. Please create a school administrator account instead."))
 		return
 	}
 
@@ -799,10 +817,7 @@ func (h *Handler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	if pending.SchoolID != "" {
 		schoolID = pending.SchoolID
 	}
-	permissions := []string{"*"}
-	if pending.Role != "owner" {
-		permissions = []string{}
-	}
+	permissions := []string{}
 
 	newUser := &store.User{
 		ID:           userID,
@@ -822,13 +837,39 @@ func (h *Handler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.Store.Users = append(h.Store.Users, newUser)
-	h.Store.Unlock()
 
 	h.Persist("users", newUser)
 
-	// Authoritatively establish the 14-day trial in PG so Super Admin and Owner agree immediately
-	if newUser.Role == "owner" && h.Pool != nil {
-		_ = subscription.EnsureOwnerTrial(r.Context(), h.Pool, newUser.ID)
+	// School onboarding: activate the reserved school and establish the
+	// 14-day trial so the School Admin lands on a working tenant.
+	if newUser.Role == "admin" && schoolID != "system" {
+		for _, s := range h.Store.Schools {
+			if s.SchoolID == schoolID && s.Status == "pending" {
+				s.Status = "active"
+				s.UpdatedAt = now
+				h.Persist("schools", s)
+				break
+			}
+		}
+		trial := &store.Subscription{
+			ID:           store.NewID("sub"),
+			SchoolID:     schoolID,
+			PackageID:    "trial",
+			StudentLimit: 500,
+			Status:       "trial",
+			NextRenewal:  now.AddDate(0, 0, 14),
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		h.Store.Subscriptions = append(h.Store.Subscriptions, trial)
+		h.Persist("subscriptions", trial)
+	}
+	h.Store.Unlock()
+
+	// Authoritatively establish the trial in PG so the subscription gate and
+	// the school portal agree immediately.
+	if newUser.Role == "admin" && schoolID != "system" && h.Pool != nil {
+		_ = subscription.EnsureSchoolTrial(r.Context(), h.Pool, schoolID)
 	}
 
 	// Generate authenticated JWT session
@@ -1280,6 +1321,89 @@ func (h *Handler) GoogleStatus(w http.ResponseWriter, _ *http.Request) {
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────
+
+// createSchoolShell reserves a pending School record (plus its default
+// academic year and settings) at signup time so the school code is unique
+// from the first request. The school is activated in VerifyOTP once the
+// signup OTP is verified, together with the School Admin account and trial.
+// No Owner entity is ever created — the school is standalone.
+func (h *Handler) createSchoolShell(name, providedCode, phone string) (*store.School, error) {
+	code := strings.ToUpper(strings.TrimSpace(providedCode))
+	h.Store.RLock()
+	if code != "" {
+		for _, s := range h.Store.Schools {
+			if strings.EqualFold(s.Code, code) {
+				h.Store.RUnlock()
+				return nil, errors.New("a school with this code already exists")
+			}
+		}
+	}
+	h.Store.RUnlock()
+	if code == "" {
+		code = h.uniqueSchoolCode(name)
+	}
+
+	now := time.Now()
+	schoolID := "SCH-" + strings.ToUpper(randomID()[:8])
+
+	school := &store.School{
+		ID:        store.NewID("sch"),
+		SchoolID:  schoolID,
+		Name:      name,
+		Code:      code,
+		Email:     "",
+		Phone:     phone,
+		Status:    "pending",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	startYear := now.Year()
+	if now.Month() < time.April {
+		startYear--
+	}
+	newYear := &store.AcademicYear{
+		ID:          store.NewID("ay"),
+		SchoolID:    schoolID,
+		Year:        fmt.Sprintf("%d-%d", startYear, startYear+1),
+		StartDate:   time.Date(startYear, 4, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:     time.Date(startYear+1, 3, 31, 0, 0, 0, 0, time.UTC),
+		IsActive:    true,
+		Status:      "active",
+		Description: "Default academic year",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	newSettings := &store.SchoolSettings{
+		SchoolID: schoolID,
+		Profile: map[string]any{
+			"schoolName": name,
+		},
+		Branding:  map[string]any{},
+		Academic:  map[string]any{"institutionalLevel": "K-12"},
+		UpdatedAt: now,
+	}
+
+	h.Store.Lock()
+	// Re-check code uniqueness under the write lock (another signup may have
+	// reserved the same derived code between the read pass and now).
+	for _, s := range h.Store.Schools {
+		if strings.EqualFold(s.Code, code) {
+			h.Store.Unlock()
+			return nil, errors.New("a school with this code already exists")
+		}
+	}
+	h.Store.Schools = append(h.Store.Schools, school)
+	h.Store.AcademicYears = append(h.Store.AcademicYears, newYear)
+	h.Store.SchoolSettings = append(h.Store.SchoolSettings, newSettings)
+	h.Store.Unlock()
+
+	h.Persist("schools", school)
+	h.Persist("academic_years", newYear)
+	h.Persist("school_settings", newSettings)
+
+	return school, nil
+}
 
 func (h *Handler) findActiveAcademicYearID(schoolID string) string {
 	h.Store.RLock()

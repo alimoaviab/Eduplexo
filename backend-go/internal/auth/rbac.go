@@ -29,18 +29,9 @@ var roleAccessMatrix = map[string]map[Feature][]Action{
 		"audit_logs": {ActionView},
 		"reports":    {ActionView},
 	},
-	// Owner is a multi-school governance role, NOT an operational school
-	// manager. Owners may create/manage schools and provision their school
-	// admins, and view portfolio-level reports/notifications. Every
-	// operational feature (students, teachers, classes, attendance, fees,
-	// exams, ...) is deliberately absent: any such API call returns 403.
-	"owner": {
-		"schools":       {ActionView, ActionCreate, ActionUpdate, ActionDelete, ActionManage},
-		"users":         {ActionView, ActionCreate, ActionUpdate, ActionDelete, ActionManage},
-		"settings":      {ActionView},
-		"reports":       {ActionView},
-		"notifications": {ActionView, ActionCreate, ActionUpdate},
-	},
+	// Owner is a retired role. It no longer exists in the access matrix: any
+	// legacy claim carrying role='owner' fails every permission check, and the
+	// auth layer refuses to issue such sessions.
 	"admin": {
 		"users":         {ActionView, ActionCreate, ActionUpdate, ActionDelete, ActionManage},
 		"settings":      {ActionView, ActionCreate, ActionUpdate, ActionDelete, ActionManage},

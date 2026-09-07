@@ -15,11 +15,12 @@ func TestSignup_WithCustomPassword_AndLogin(t *testing.T) {
 
 	// 1. Signup with custom password
 	signupBody, _ := json.Marshal(map[string]any{
-		"fullName": "Custom User",
-		"email":    "customuser@example.com",
-		"phone":    "+923001234567",
-		"password": customPassword,
-		"role":     "owner",
+		"fullName":   "Custom User",
+		"schoolName": "Custom User School",
+		"email":      "customuser@example.com",
+		"phone":      "+923001234567",
+		"password":   customPassword,
+		"role":       "admin",
 	})
 	req := httptest.NewRequest("POST", "/api/auth/signup", bytes.NewReader(signupBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -60,7 +61,7 @@ func TestSignup_WithCustomPassword_AndLogin(t *testing.T) {
 	loginBodyCorrect, _ := json.Marshal(map[string]any{
 		"email":    "customuser@example.com",
 		"password": customPassword,
-		"role":     "owner",
+		"role":     "admin",
 	})
 	reqLoginCorrect := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(loginBodyCorrect))
 	reqLoginCorrect.Header.Set("Content-Type", "application/json")
@@ -76,7 +77,7 @@ func TestSignup_WithCustomPassword_AndLogin(t *testing.T) {
 	loginBodyWrong, _ := json.Marshal(map[string]any{
 		"email":    "customuser@example.com",
 		"password": "Test@123",
-		"role":     "owner",
+		"role":     "admin",
 	})
 	reqLoginWrong := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(loginBodyWrong))
 	reqLoginWrong.Header.Set("Content-Type", "application/json")

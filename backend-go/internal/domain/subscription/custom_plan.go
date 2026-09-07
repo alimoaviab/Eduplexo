@@ -1,15 +1,16 @@
-// custom_plan.go — Owner-specific negotiated Custom Plans.
+// custom_plan.go — School-specific negotiated Custom Plans.
 //
 // A Custom Plan is a PRIVATE commercial agreement between EduPlexo and one
-// Owner. It lives in the existing `subscription_plans` catalog as a row with
-// owner_user_id set + plan_type='custom' — never a global plan, never a
-// parallel table. The plan becomes the Owner's CURRENT entitlement only when
-// a `subscriptions` row binds to it (active) or is future-dated (scheduled),
-// exactly like every other plan on the platform. Capacity enforcement,
-// payment verification, suspension, and history all reuse the standard
-// engine untouched.
+// school (represented by its School Admin account). It lives in the existing
+// `subscription_plans` catalog as a row with owner_user_id set (the customer
+// principal — the School Admin user id) + plan_type='custom' — never a global
+// plan, never a parallel table. The plan becomes the school's CURRENT
+// entitlement only when a `subscriptions` row binds to it (active) or is
+// future-dated (scheduled), exactly like every other plan on the platform.
+// Capacity enforcement, payment verification, suspension, and history all
+// reuse the standard engine untouched.
 //
-// Every mutation is Super-Admin-only, owner-verified on the backend, recorded
+// Every mutation is Super-Admin-only, school-verified on the backend, recorded
 // in subscription_history (never hard-deleted), and idempotent.
 package subscription
 
@@ -30,7 +31,7 @@ import (
 // grant when retiring a negotiated plan (0 = end immediately).
 const CustomPlanMaxTransitionDays = 60
 
-// CustomPlanContract is a catalog row view for one owner's negotiated plan.
+// CustomPlanContract is a catalog row view for one school's negotiated plan.
 type CustomPlanContract struct {
 	ID             string     `json:"id"`
 	Name           string     `json:"name"`
@@ -67,57 +68,36 @@ type OwnerBrief struct {
 
 // ─── helpers ─────────────────────────────────────────────────────────────
 
-// loadOwnerBrief resolves an owner user row (role='owner' enforced) plus the
-// schools they own. Returns a controlled NOT_FOUND when the id is not an
-// owner.
-func (h *Handler) loadOwnerBrief(r *http.Request, ownerID string) (*OwnerBrief, OwnerScope, error) {
+// loadOwnerBrief resolves a school admin user row (role='admin' enforced)
+// plus their school. Returns a controlled NOT_FOUND when the id is not a
+// school admin.
+func (h *Handler) loadOwnerBrief(r *http.Request, ownerID string) (*OwnerBrief, SchoolScope, error) {
 	var b OwnerBrief
 	var first, last, phone, email string
+	var schoolID string
 	err := h.Pool.QueryRow(r.Context(), `
 		SELECT id, COALESCE(profile_first,''), COALESCE(profile_last,''),
-		       COALESCE(email,''), COALESCE(profile_phone,'')
-		FROM users WHERE id = $1 AND role = 'owner'
-	`, ownerID).Scan(&b.OwnerID, &first, &last, &email, &phone)
+		       COALESCE(email,''), COALESCE(profile_phone,''), COALESCE(school_id,'')
+		FROM users WHERE id = $1 AND role = 'admin'
+	`, ownerID).Scan(&b.OwnerID, &first, &last, &email, &phone, &schoolID)
 	if err == pgx.ErrNoRows {
-		return nil, OwnerScope{}, api.NewControlledError("NOT_FOUND", "Owner not found.", 404, nil)
+		return nil, SchoolScope{}, api.NewControlledError("NOT_FOUND", "School admin not found.", 404, nil)
 	}
 	if err != nil {
-		return nil, OwnerScope{}, fmt.Errorf("load owner: %w", err)
+		return nil, SchoolScope{}, fmt.Errorf("load school admin: %w", err)
 	}
 	b.Name = strings.TrimSpace(first + " " + last)
 	b.Email = email
 	b.Phone = phone
 
-	rows, err := h.Pool.Query(r.Context(), `
-		SELECT DISTINCT sch.school_id, COALESCE(sch.name, '')
-		FROM schools sch
-		WHERE (sch.owner_user_id = $1 OR sch.owner_email = $2)
-		  AND sch.school_id NOT IN ('system', '__global__')
-		  AND sch.school_id <> ''
-		UNION
-		SELECT DISTINCT os.school_id, COALESCE(sch.name, '')
-		FROM owner_schools os
-		LEFT JOIN schools sch ON sch.school_id = os.school_id
-		WHERE os.owner_user_id = $1
-		ORDER BY 1 LIMIT 50
-	`, ownerID, b.Email)
-	if err != nil {
-		return nil, OwnerScope{}, fmt.Errorf("load owner schools: %w", err)
+	if schoolID != "" && schoolID != "system" && schoolID != "__global__" {
+		var schName string
+		_ = h.Pool.QueryRow(r.Context(), `
+			SELECT COALESCE(name, '') FROM schools WHERE school_id = $1
+		`, schoolID).Scan(&schName)
+		b.Schools = append(b.Schools, ownerSchoolRef{SchoolID: schoolID, Name: schName})
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var ref ownerSchoolRef
-		if err := rows.Scan(&ref.SchoolID, &ref.Name); err == nil {
-			b.Schools = append(b.Schools, ref)
-		}
-	}
-	scope := OwnerScope{OwnerUserID: ownerID, OwnerEmail: b.Email}
-	for _, s := range b.Schools {
-		scope.SchoolIDs = append(scope.SchoolIDs, s.SchoolID)
-	}
-	if len(scope.SchoolIDs) == 0 {
-		scope.SchoolIDs = []string{ownerID}
-	}
+	scope := SchoolScope{SchoolID: schoolID}
 	return &b, scope, nil
 }
 
@@ -179,8 +159,8 @@ func (h *Handler) listCustomPlansForOwner(r *http.Request, ownerID string) ([]Cu
 	return plans, nil
 }
 
-// ─── GET /api/super-admin/owners/search?q= ───────────────────────────────
-// Backend owner lookup: name, email, phone, institution name, or campus code.
+// ─── GET /api/super-admin/customers/search?q= ─────────────────────────────
+// Backend customer lookup: school admin name, email, phone, or school name/code.
 
 type OwnerSearchResult struct {
 	OwnerID            string     `json:"owner_id"`
@@ -202,7 +182,7 @@ type OwnerSearchResult struct {
 
 func (h *Handler) OwnersSearch(w http.ResponseWriter, r *http.Request) {
 	if h.Pool == nil {
-		api.WriteResult(w, api.Fail("DATABASE_UNAVAILABLE", "Postgres is required for owner search.", 503, nil))
+		api.WriteResult(w, api.Fail("DATABASE_UNAVAILABLE", "Postgres is required for customer search.", 503, nil))
 		return
 	}
 	ctx := api.FromRequest(r)
@@ -213,16 +193,17 @@ func (h *Handler) OwnersSearch(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	api.WriteResult(w, api.ServiceTry(func() (map[string]any, error) {
 		like := "%" + strings.ToLower(q) + "%"
-		// Search owner users by name/email/phone and by owned school
-		// name/code/phone — all against the real database tables.
+		// Search school admin users by name/email/phone and by school
+		// name/code — all against the real database tables.
 		rows, err := h.Pool.Query(r.Context(), `
 			SELECT DISTINCT u.id, COALESCE(u.profile_first,''), COALESCE(u.profile_last,''),
 			       COALESCE(u.email,''), COALESCE(u.profile_phone,''), COALESCE(u.status,'active'),
 			       u.created_at
 			FROM users u
-			LEFT JOIN schools sch ON sch.owner_user_id = u.id OR sch.owner_email = u.email
-			LEFT JOIN owner_schools os ON os.owner_user_id = u.id
-			WHERE u.role = 'owner'
+			LEFT JOIN schools sch ON sch.school_id = u.school_id
+			WHERE u.role = 'admin'
+			  AND u.school_id NOT IN ('system', '__global__')
+			  AND u.school_id <> ''
 			  AND ($1 = '%%'
 			       OR LOWER(u.email) LIKE $1
 			       OR LOWER(COALESCE(u.profile_first,'')) LIKE $1
@@ -236,7 +217,7 @@ func (h *Handler) OwnersSearch(w http.ResponseWriter, r *http.Request) {
 			LIMIT 25
 		`, like, q)
 		if err != nil {
-			return nil, fmt.Errorf("owner search: %w", err)
+			return nil, fmt.Errorf("customer search: %w", err)
 		}
 		defer rows.Close()
 
@@ -253,16 +234,13 @@ func (h *Handler) OwnersSearch(w http.ResponseWriter, r *http.Request) {
 		}
 		results := make([]OwnerSearchResult, 0, len(raws))
 		for _, o := range raws {
-			scope := OwnerScope{OwnerUserID: o.id, OwnerEmail: o.email}
-			if err := ReconcileScope(r.Context(), h.Pool, scope); err == nil {
-				// best effort: resolve full scope (school ids) first
-				if full, err := ResolveOwnerScopeByUser(r.Context(), h.Pool, o.id); err == nil {
-					scope = full
-				}
+			scope, err := ResolveSchoolScopeByUser(r.Context(), h.Pool, o.id)
+			if err != nil {
+				continue
 			}
 			_ = ReconcileScope(r.Context(), h.Pool, scope)
-			sub, _ := GetOwnerSubscription(r.Context(), h.Pool, scope)
-			used, _ := CountActiveStudentsInScope(r.Context(), h.Pool, scope)
+			sub, _ := GetSchoolSubscription(r.Context(), h.Pool, scope)
+			used, _ := CountActiveStudents(r.Context(), h.Pool, scope.SchoolID)
 
 			// School names for display.
 			names := make([]string, 0)
@@ -352,11 +330,11 @@ func (h *Handler) OwnerCustomPlansDetail(w http.ResponseWriter, r *http.Request)
 			return OwnerCustomPlanDetail{}, err
 		}
 		_ = ReconcileScope(r.Context(), h.Pool, scope)
-		sub, err := GetOwnerSubscription(r.Context(), h.Pool, scope)
+		sub, err := GetSchoolSubscription(r.Context(), h.Pool, scope)
 		if err != nil {
 			return OwnerCustomPlanDetail{}, err
 		}
-		used, _ := CountActiveStudentsInScope(r.Context(), h.Pool, scope)
+		used, _ := CountActiveStudents(r.Context(), h.Pool, scope.SchoolID)
 		plans, err := h.listCustomPlansForOwner(r, ownerID)
 		if err != nil {
 			return OwnerCustomPlanDetail{}, err
@@ -487,12 +465,12 @@ func (h *Handler) CreateCustomPlan(w http.ResponseWriter, r *http.Request) {
 			return nil, err
 		}
 		_ = ReconcileScope(r.Context(), h.Pool, scope)
-		sub, err := GetOwnerSubscription(r.Context(), h.Pool, scope)
+		sub, err := GetSchoolSubscription(r.Context(), h.Pool, scope)
 		if err != nil {
 			return nil, err
 		}
 		phase := DerivePhase(sub)
-		used, _ := CountActiveStudentsInScope(r.Context(), h.Pool, scope)
+		used, _ := CountActiveStudents(r.Context(), h.Pool, scope.SchoolID)
 
 		immediate := eff == ""
 		var start time.Time
@@ -531,10 +509,9 @@ func (h *Handler) CreateCustomPlan(w http.ResponseWriter, r *http.Request) {
 			var schedExists bool
 			_ = h.Pool.QueryRow(r.Context(), `
 				SELECT EXISTS(SELECT 1 FROM subscriptions ss
-				              JOIN subscription_plans sp ON sp.id = ss.plan_id
-				              WHERE ss.status = 'scheduled' AND sp.plan_type = 'custom'
-				                AND (ss.school_id = ANY($1) OR ss.owner_user_id = $2))
-			`, scope.SchoolIDs, ownerID).Scan(&schedExists)
+				              JOIN subscription_plans sp ON sp.id = ss.plan_id				WHERE ss.status = 'scheduled' AND sp.plan_type = 'custom'
+				  AND ss.school_id = $1)
+			`, scope.SchoolID).Scan(&schedExists)
 			if schedExists {
 				return nil, api.NewControlledError("SCHEDULED_EXISTS", "The owner already has a scheduled custom plan. Activate or end it first.", 409, nil)
 			}
@@ -560,7 +537,7 @@ func (h *Handler) CreateCustomPlan(w http.ResponseWriter, r *http.Request) {
 			return nil, fmt.Errorf("insert custom plan: %w", err)
 		}
 
-		targetSchool := scope.PrimarySchool()
+		targetSchool := scope.SchoolID
 		subID := store.NewID("sub")
 		subStatus := "scheduled"
 		action := "custom_plan_schedule"
@@ -571,9 +548,9 @@ func (h *Handler) CreateCustomPlan(w http.ResponseWriter, r *http.Request) {
 			// entitlement remains (history rows are preserved).
 			if _, err := tx.Exec(r.Context(), `
 				UPDATE subscriptions SET status = 'cancelled', updated_at = NOW()
-				WHERE (school_id = ANY($1) OR owner_user_id = $2)
+				WHERE school_id = $1
 				  AND status IN ('active','trial','scheduled')
-			`, scope.SchoolIDs, ownerID); err != nil {
+			`, scope.SchoolID); err != nil {
 				return nil, fmt.Errorf("cancel current subscription: %w", err)
 			}
 			// The replaced standard subscription keeps its contract history.
@@ -596,8 +573,8 @@ func (h *Handler) CreateCustomPlan(w http.ResponseWriter, r *http.Request) {
 			// Future-dated: cancel any prior scheduled row, keep current live.
 			if _, err := tx.Exec(r.Context(), `
 				UPDATE subscriptions SET status = 'cancelled', updated_at = NOW()
-				WHERE (school_id = ANY($1) OR owner_user_id = $2) AND status = 'scheduled'
-			`, scope.SchoolIDs, ownerID); err != nil {
+				WHERE school_id = $1 AND status = 'scheduled'
+			`, scope.SchoolID); err != nil {
 				return nil, fmt.Errorf("cancel prior scheduled: %w", err)
 			}
 		}
@@ -666,15 +643,15 @@ func (h *Handler) UpdateCustomPlan(w http.ResponseWriter, r *http.Request) {
 		api.WriteResult(w, api.Fail("VALIDATION_ERROR", "Invalid JSON body.", 400, nil))
 		return
 	}
-	api.WriteResult(w, api.ServiceTry(func() (map[string]any, error) {
-		if _, _, err := h.loadOwnerBrief(r, ownerID); err != nil {
-			return nil, err
-		}
+	api.WriteResult(w, api.ServiceTry(func() (map[string]any, error) {			_, scope, err := h.loadOwnerBrief(r, ownerID)
+			if err != nil {
+				return nil, err
+			}
 		// Lock the contract row and confirm ownership (never trust the client
 		// plan id — it must belong to the owner in the URL).
 		var curLimit, curPrice, curDuration int
 		var curName, curOwner string
-		err := h.Pool.QueryRow(r.Context(), `
+		err = h.Pool.QueryRow(r.Context(), `
 			SELECT name, student_limit, price, COALESCE(duration_days,30), COALESCE(owner_user_id,'')
 			FROM subscription_plans WHERE id = $1 AND plan_type = 'custom' AND is_active = true
 		`, planID).Scan(&curName, &curLimit, &curPrice, &curDuration, &curOwner)
@@ -718,8 +695,8 @@ func (h *Handler) UpdateCustomPlan(w http.ResponseWriter, r *http.Request) {
 			ORDER BY created_at DESC LIMIT 1
 		`, planID).Scan(&boundStatus, &boundID)
 		if boundStatus == "active" {
-			scope, _ := ResolveOwnerScopeByUser(r.Context(), h.Pool, ownerID)
-			used, _ := CountActiveStudentsInScope(r.Context(), h.Pool, scope)
+			scope, _ := ResolveSchoolScopeByUser(r.Context(), h.Pool, ownerID)
+			used, _ := CountActiveStudents(r.Context(), h.Pool, scope.SchoolID)
 			if used > body.StudentLimit {
 				return nil, api.NewControlledError("CAPACITY_CONFLICT",
 					fmt.Sprintf("Cannot lower the capacity to %d: the owner currently has %d active students.", body.StudentLimit, used),
@@ -759,7 +736,7 @@ func (h *Handler) UpdateCustomPlan(w http.ResponseWriter, r *http.Request) {
 			INSERT INTO subscription_history (id, school_id, plan_name, student_limit, amount,
 				payment_status, start_date, end_date, action, created_at)
 			VALUES ($1,$2,$3,$4,$5,'admin',NOW(),NOW(),'custom_plan_update',NOW())
-		`, store.NewID("sh"), scopeTarget(ownerID), body.Name, body.StudentLimit, body.Price); err != nil {
+		`, store.NewID("sh"), scope.SchoolID, body.Name, body.StudentLimit, body.Price); err != nil {
 			return nil, fmt.Errorf("record custom plan update: %w", err)
 		}
 		if err := tx.Commit(r.Context()); err != nil {
@@ -774,8 +751,6 @@ func (h *Handler) UpdateCustomPlan(w http.ResponseWriter, r *http.Request) {
 	}))
 }
 
-// scopeTarget is the school_id used for audit/history rows for an owner.
-func scopeTarget(ownerID string) string { return ownerID }
 
 // ─── POST /api/super-admin/owners/{ownerID}/custom-plans/{planID}/activate ─
 
@@ -811,7 +786,7 @@ func (h *Handler) ActivateCustomPlan(w http.ResponseWriter, r *http.Request) {
 		}
 
 		_ = ReconcileScope(r.Context(), h.Pool, scope)
-		sub, err := GetOwnerSubscription(r.Context(), h.Pool, scope)
+		sub, err := GetSchoolSubscription(r.Context(), h.Pool, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -820,7 +795,7 @@ func (h *Handler) ActivateCustomPlan(w http.ResponseWriter, r *http.Request) {
 			return map[string]any{"custom_plan_id": planID, "already_active": true,
 				"message": fmt.Sprintf("'%s' is already the Owner's current plan.", name)}, nil
 		}
-		used, _ := CountActiveStudentsInScope(r.Context(), h.Pool, scope)
+		used, _ := CountActiveStudents(r.Context(), h.Pool, scope.SchoolID)
 		if used > limit {
 			return nil, api.NewControlledError("CAPACITY_CONFLICT",
 				fmt.Sprintf("Cannot activate a %d-student custom plan while the owner has %d active students.", limit, used),
@@ -837,9 +812,9 @@ func (h *Handler) ActivateCustomPlan(w http.ResponseWriter, r *http.Request) {
 
 		if _, err := tx.Exec(r.Context(), `
 			UPDATE subscriptions SET status = 'cancelled', updated_at = NOW()
-			WHERE (school_id = ANY($1) OR owner_user_id = $2)
+			WHERE school_id = $1
 			  AND status IN ('active','trial','scheduled')
-		`, scope.SchoolIDs, ownerID); err != nil {
+		`, scope.SchoolID); err != nil {
 			return nil, fmt.Errorf("cancel current: %w", err)
 		}
 		// Retire other custom contracts that had a live subscription.
@@ -862,7 +837,7 @@ func (h *Handler) ActivateCustomPlan(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		targetSchool := scope.PrimarySchool()
+		targetSchool := scope.SchoolID
 		subID := store.NewID("sub")
 		if _, err := tx.Exec(r.Context(), `
 			INSERT INTO subscriptions (id, school_id, owner_user_id, plan_id, plan_name, student_limit,
@@ -987,7 +962,7 @@ func (h *Handler) EndCustomPlan(w http.ResponseWriter, r *http.Request) {
 				INSERT INTO subscription_history (id, school_id, plan_name, student_limit, amount,
 					payment_status, start_date, end_date, action, created_at)
 				VALUES ($1,$2,$3,$4,$5,'admin',$6,$7,'custom_plan_end',NOW())
-			`, store.NewID("sh"), scope.PrimarySchool(), name, 0, 0, now, newEnd); err != nil {
+			`, store.NewID("sh"), scope.SchoolID, name, 0, 0, now, newEnd); err != nil {
 				return nil, fmt.Errorf("record end: %w", err)
 			}
 		} else if err == pgx.ErrNoRows {
@@ -1003,7 +978,7 @@ func (h *Handler) EndCustomPlan(w http.ResponseWriter, r *http.Request) {
 				INSERT INTO subscription_history (id, school_id, plan_name, student_limit, amount,
 					payment_status, start_date, end_date, action, created_at)
 				VALUES ($1,$2,$3,$4,$5,'admin',NOW(),NOW(),'custom_plan_end',NOW())
-			`, store.NewID("sh"), scope.PrimarySchool(), name, 0, 0); err != nil {
+			`, store.NewID("sh"), scope.SchoolID, name, 0, 0); err != nil {
 				return nil, fmt.Errorf("record end: %w", err)
 			}
 		} else {

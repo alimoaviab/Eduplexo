@@ -252,7 +252,7 @@ func (h *Handler) AdminListSubscriptions(w http.ResponseWriter, r *http.Request)
 		query := `
 			SELECT 
 				s.id, s.school_id, 
-				COALESCE(sc.name, u.email, 'Owner Account') AS school_name,
+				COALESCE(sc.name, u.email, 'School Account') AS school_name,
 				COALESCE(NULLIF(TRIM(u.profile_first || ' ' || u.profile_last), ''), sc.admin_name, u.email, '') AS owner_name,
 				COALESCE(u.email, '') AS owner_email,
 				COALESCE(sc.contact_phone, u.profile_phone, '') AS phone,
@@ -271,7 +271,7 @@ func (h *Handler) AdminListSubscriptions(w http.ResponseWriter, r *http.Request)
 				s.grace_ends_at
 			FROM subscriptions s
 			LEFT JOIN LATERAL (
-				SELECT sch.name, sch.admin_name, sch.contact_phone, sch.owner_email
+				SELECT sch.name, sch.admin_name, sch.contact_phone, ''::text AS owner_email
 				FROM schools sch 
 				WHERE sch.school_id = s.school_id OR sch.id = s.school_id
 				LIMIT 1
@@ -279,10 +279,9 @@ func (h *Handler) AdminListSubscriptions(w http.ResponseWriter, r *http.Request)
 			LEFT JOIN LATERAL (
 				SELECT u.profile_first, u.profile_last, u.profile_phone, u.email
 				FROM users u
-				WHERE u.email = sc.owner_email 
-				   OR (u.school_id = s.school_id AND u.role IN ('owner', 'admin'))
+				WHERE (u.school_id = s.school_id AND u.role = 'admin')
 				   OR u.id = s.school_id
-				ORDER BY CASE WHEN u.role = 'owner' THEN 1 WHEN u.role = 'admin' THEN 2 ELSE 3 END
+				ORDER BY CASE WHEN u.role = 'admin' THEN 1 ELSE 2 END
 				LIMIT 1
 			) u ON true
 			LEFT JOIN (
@@ -386,9 +385,9 @@ func (h *Handler) AdminGetSchoolPayments(w http.ResponseWriter, r *http.Request)
 			LEFT JOIN subscription_plans sp ON sp.id = pr.plan_id
 			WHERE (
 				pr.school_id = $1
-				OR pr.school_id IN (SELECT school_id FROM schools WHERE owner_email = $1 OR owner_user_id = $1 OR id = $1)
+				OR pr.school_id IN (SELECT school_id FROM schools WHERE id = $1)
 				OR pr.school_id IN (SELECT id FROM users WHERE email = $1 OR id = $1)
-				OR ($2 <> '' AND (pr.school_id IN (SELECT school_id FROM users WHERE email = $2) OR pr.school_id IN (SELECT school_id FROM schools WHERE owner_email = $2)))
+				OR ($2 <> '' AND pr.school_id IN (SELECT school_id FROM users WHERE email = $2))
 			)
 			AND ($3 = '' OR pr.status = $3)
 			ORDER BY pr.submitted_at DESC

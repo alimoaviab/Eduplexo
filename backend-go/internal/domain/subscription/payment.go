@@ -186,7 +186,7 @@ func (h *Handler) UploadPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch ctx.Role {
-	case "owner", "admin", "super_admin":
+	case "admin", "super_admin":
 	default:
 		api.WriteResult(w, api.Fail("FORBIDDEN", "You do not have permission to submit payment requests.", 403, nil))
 		return
@@ -210,8 +210,7 @@ func (h *Handler) UploadPayment(w http.ResponseWriter, r *http.Request) {
 			return nil, api.NewControlledError("VALIDATION_ERROR", "transaction_id, amount, and either screenshot or SMS text are required.", 400, nil)
 		}
 
-		// Resolve the owner's billing scope: owner accounts may not carry a
-		// school_id in their session, so fall back to their first owned school.
+		// Resolve the school's billing scope.
 		schoolID := ctx.SchoolID
 		if schoolID == "" || schoolID == "system" || schoolID == "__global__" {
 			schoolID = h.resolveSchoolID(ctx)
@@ -221,8 +220,8 @@ func (h *Handler) UploadPayment(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Validate the selected package against the catalog when a catalog plan
-		// is referenced. Custom plans are OWNER-SPECIFIC: the payment must be
-		// filed by the exact owner the contract was negotiated for, and the
+		// is referenced. Custom plans are SCHOOL-SPECIFIC: the payment must be
+		// filed by the school admin the contract was negotiated for, and the
 		// amount must equal the negotiated price.
 		if h.Pool != nil && planID != "" {
 			var catalogPrice, catalogLimit int
@@ -243,8 +242,7 @@ func (h *Handler) UploadPayment(w http.ResponseWriter, r *http.Request) {
 				// (Legacy modular package-builder encodings have no row and
 				// skip this catalog-level validation.)
 				if planType == "custom" {
-					scope, serr := ResolveOwnerScope(r.Context(), h.Pool, schoolID)
-					if serr != nil || scope.OwnerUserID == "" || scope.OwnerUserID != planOwner {
+					if planOwner == "" || planOwner != ctx.UserID {
 						return nil, api.NewControlledError("FORBIDDEN", "This negotiated plan does not belong to your account.", 403, nil)
 					}
 				}
@@ -366,27 +364,26 @@ func (h *Handler) AdminListPendingPayments(w http.ResponseWriter, r *http.Reques
 			SELECT pr.id, pr.school_id, pr.plan_id, COALESCE(pr.payment_method_id,''), COALESCE(pr.screenshot_url,''),
 			       pr.transaction_id, pr.amount, pr.status, pr.submitted_at, pr.verified_at, COALESCE(pr.verified_by,''),
 			       COALESCE(pr.rejection_reason,''), COALESCE(pr.notes,''),
-			       COALESCE(s.name, u.email, 'Owner Account') AS school_name,
-			       COALESCE(NULLIF(TRIM(u.profile_first || ' ' || u.profile_last), ''), s.admin_name, u.email, '') AS owner_name,
+		       COALESCE(s.name, u.email, 'School Account') AS school_name,
+		       COALESCE(NULLIF(TRIM(u.profile_first || ' ' || u.profile_last), ''), s.admin_name, u.email, '') AS owner_name,
 			       COALESCE(s.contact_phone, u.profile_phone, '') AS phone,
 			       COALESCE(s.contact_phone, u.profile_phone, '') AS whatsapp,
 			       COALESCE(sp.name, pr.plan_id) AS plan_name
 			FROM payment_requests pr
-			LEFT JOIN LATERAL (
-				SELECT sc.name, sc.admin_name, sc.contact_phone, sc.owner_email
-				FROM schools sc 
-				WHERE sc.school_id = pr.school_id OR sc.id = pr.school_id
-				LIMIT 1
-			) s ON true
-			LEFT JOIN LATERAL (
-				SELECT u.profile_first, u.profile_last, u.profile_phone, u.email
-				FROM users u
-				WHERE u.email = s.owner_email 
-				   OR (u.school_id = pr.school_id AND u.role IN ('owner', 'admin'))
-				   OR u.id = pr.school_id
-				ORDER BY CASE WHEN u.role = 'owner' THEN 1 WHEN u.role = 'admin' THEN 2 ELSE 3 END
-				LIMIT 1
-			) u ON true
+		LEFT JOIN LATERAL (
+			SELECT sc.name, sc.admin_name, sc.contact_phone, ''::text AS owner_email
+			FROM schools sc 
+			WHERE sc.school_id = pr.school_id OR sc.id = pr.school_id
+			LIMIT 1
+		) s ON true
+		LEFT JOIN LATERAL (
+			SELECT u.profile_first, u.profile_last, u.profile_phone, u.email
+			FROM users u
+			WHERE u.school_id = pr.school_id AND u.role = 'admin'
+			   OR u.id = pr.school_id
+			ORDER BY CASE WHEN u.role = 'admin' THEN 1 ELSE 2 END
+			LIMIT 1
+		) u ON true
 			LEFT JOIN subscription_plans sp ON sp.id = pr.plan_id
 			WHERE ($1::text = 'all' OR pr.status = $1)
 			ORDER BY pr.submitted_at DESC
@@ -460,10 +457,7 @@ func (h *Handler) AdminVerifyPayment(w http.ResponseWriter, r *http.Request) {
 			}, nil
 		}
 
-		scope, err := ResolveOwnerScope(r.Context(), h.Pool, schoolID)
-		if err != nil {
-			return nil, fmt.Errorf("resolve owner scope: %w", err)
-		}
+		scope := SchoolScope{SchoolID: schoolID}
 
 		// ── Validate the selected package ────────────────────────────────
 		planName := planID
@@ -480,10 +474,10 @@ func (h *Handler) AdminVerifyPayment(w http.ResponseWriter, r *http.Request) {
 			return nil, fmt.Errorf("get plan: %w", err)
 		}
 
-		// A negotiated custom plan may only be activated for the owner it was
-		// created for — never re-pointed at another tenant.
-		if planType == "custom" && (planOwner == "" || planOwner != scope.OwnerUserID) {
-			return nil, api.NewControlledError("FORBIDDEN", "This payment references a custom plan that does not belong to the payment's owner.", 403, nil)
+		// A negotiated custom plan may only be activated for the school admin
+		// it was created for — never re-pointed at another tenant.
+		if planType == "custom" && (planOwner == "" || planOwner != ctx.UserID) {
+			return nil, api.NewControlledError("FORBIDDEN", "This payment references a custom plan that does not belong to this school.", 403, nil)
 		}
 
 		// An ENDED custom contract (no active row at approval time) cannot be
@@ -493,12 +487,12 @@ func (h *Handler) AdminVerifyPayment(w http.ResponseWriter, r *http.Request) {
 			_ = h.Pool.QueryRow(r.Context(), `SELECT plan_type FROM subscription_plans WHERE id = $1`, planID).Scan(&existsType)
 			if existsType == "custom" {
 				return nil, api.NewControlledError("STATE_CONFLICT",
-					"This custom plan agreement has ended and cannot be activated. Create a new agreement or renew via the Owner's Custom Plan manager.", 409, nil)
+						"This custom plan agreement has ended and cannot be activated. Create a new agreement or renew via the Custom Plan manager.", 409, nil)
 			}
 		}
 
 		now := time.Now()
-		sub, err := GetOwnerSubscription(r.Context(), h.Pool, scope)
+		sub, err := GetSchoolSubscription(r.Context(), h.Pool, scope)
 		if err != nil {
 			return nil, fmt.Errorf("get current subscription: %w", err)
 		}
@@ -609,21 +603,18 @@ func (h *Handler) AdminVerifyPayment(w http.ResponseWriter, r *http.Request) {
 		// ── Case 3: Expired / suspended / trial ended → activate now ─────
 		if _, err := tx.Exec(r.Context(), `
 			UPDATE subscriptions SET status = 'cancelled', updated_at = NOW()
-			WHERE (school_id = ANY($1) OR owner_user_id = $2) AND status IN ('active', 'trial')
-		`, scope.SchoolIDs, scope.OwnerUserID); err != nil {
+			WHERE school_id = $1 AND status IN ('active', 'trial')
+		`, schoolID); err != nil {
 			return nil, fmt.Errorf("cancel old subscription: %w", err)
 		}
 
 		targetSchool := schoolID
-		if targetSchool == "" || targetSchool == "system" {
-			targetSchool = scope.PrimarySchool()
-		}
 		subID := store.NewID("sub")
 		if _, err := tx.Exec(r.Context(), `
 			INSERT INTO subscriptions (id, school_id, owner_user_id, plan_id, plan_name, student_limit, price,
 				currency, start_date, end_date, status, is_trial, trial_used, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, 'PKR', $8, $9, 'active', false, true, NOW(), NOW())
-		`, subID, targetSchool, scope.OwnerUserID, planID, planName, studentLimit, amount, now, now.AddDate(0, 0, durationDays)); err != nil {
+			VALUES ($1, $2, '', $4, $5, $6, $7, 'PKR', $8, $9, 'active', false, true, NOW(), NOW())
+		`, subID, targetSchool, planID, planName, studentLimit, amount, now, now.AddDate(0, 0, durationDays)); err != nil {
 			return nil, fmt.Errorf("create subscription: %w", err)
 		}
 		if planType == "custom" {

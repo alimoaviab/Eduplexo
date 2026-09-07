@@ -74,11 +74,12 @@ func TestSignup_InitiatesOTPVerification(t *testing.T) {
 	h, memStore, mockEmail := setupTestAuthHandler()
 
 	signupBody := map[string]any{
-		"fullName": "Aisha Khan",
-		"email":    "aisha@example.com",
-		"phone":    "+923001234567",
-		"password": "Password123!",
-		"role":     "owner",
+		"fullName":   "Aisha Khan",
+		"schoolName": "Aisha Academy",
+		"email":      "aisha@example.com",
+		"phone":      "+923001234567",
+		"password":   "Password123!",
+		"role":       "admin",
 	}
 	bodyBytes, _ := json.Marshal(signupBody)
 	req := httptest.NewRequest("POST", "/api/auth/signup", bytes.NewReader(bodyBytes))
@@ -134,11 +135,12 @@ func TestVerifyOTP_Success(t *testing.T) {
 
 	// 1. Signup
 	signupBody, _ := json.Marshal(map[string]any{
-		"fullName": "Hamza Ali",
-		"email":    "hamza@example.com",
-		"phone":    "+923007654321",
-		"password": "Password123!",
-		"role":     "owner",
+		"fullName":   "Hamza Ali",
+		"schoolName": "Hamza High",
+		"email":      "hamza@example.com",
+		"phone":      "+923007654321",
+		"password":   "Password123!",
+		"role":       "admin",
 	})
 	req := httptest.NewRequest("POST", "/api/auth/signup", bytes.NewReader(signupBody))
 	w := httptest.NewRecorder()
@@ -173,12 +175,12 @@ func TestVerifyOTP_Success(t *testing.T) {
 		t.Fatal("expected JWT token in response data")
 	}
 
-	// 3. User should now exist and be active
+	// 3. User should now exist and be active as School Admin
 	if len(memStore.Users) != 3 {
 		t.Fatalf("expected 3 users in store (2 seed + 1 new), got %d", len(memStore.Users))
 	}
 	user := memStore.Users[2]
-	if user.Email != "hamza@example.com" || user.Role != "owner" || user.Status != "active" {
+	if user.Email != "hamza@example.com" || user.Role != "admin" || user.Status != "active" {
 		t.Fatalf("unexpected user record: %+v", user)
 	}
 
@@ -195,10 +197,11 @@ func TestVerifyOTP_MaxAttemptsExceeded(t *testing.T) {
 	h, _, _ := setupTestAuthHandler()
 
 	signupBody, _ := json.Marshal(map[string]any{
-		"fullName": "Brute Force Tester",
-		"email":    "brute@example.com",
-		"password": "Password123!",
-		"role":     "owner",
+		"fullName":   "Brute Force Tester",
+		"schoolName": "Brute Force School",
+		"email":      "brute@example.com",
+		"password":   "Password123!",
+		"role":       "admin",
 	})
 	w := httptest.NewRecorder()
 	h.Signup(w, httptest.NewRequest("POST", "/api/auth/signup", bytes.NewReader(signupBody)))
@@ -236,10 +239,11 @@ func TestResendOTP_CooldownAndInvalidation(t *testing.T) {
 	h, memStore, mockEmail := setupTestAuthHandler()
 
 	signupBody, _ := json.Marshal(map[string]any{
-		"fullName": "Resend Tester",
-		"email":    "resend@example.com",
-		"password": "Password123!",
-		"role":     "owner",
+		"fullName":   "Resend Tester",
+		"schoolName": "Resend School",
+		"email":      "resend@example.com",
+		"password":   "Password123!",
+		"role":       "admin",
 	})
 	w := httptest.NewRecorder()
 	h.Signup(w, httptest.NewRequest("POST", "/api/auth/signup", bytes.NewReader(signupBody)))
@@ -307,10 +311,11 @@ func TestVerifyOTP_Strict5MinExpiration(t *testing.T) {
 	h, memStore, mockEmail := setupTestAuthHandler()
 
 	signupBody, _ := json.Marshal(map[string]any{
-		"fullName": "Expiry Tester",
-		"email":    "expiry@example.com",
-		"password": "Password123!",
-		"role":     "owner",
+		"fullName":   "Expiry Tester",
+		"schoolName": "Expiry School",
+		"email":      "expiry@example.com",
+		"password":   "Password123!",
+		"role":       "admin",
 	})
 	w := httptest.NewRecorder()
 	h.Signup(w, httptest.NewRequest("POST", "/api/auth/signup", bytes.NewReader(signupBody)))

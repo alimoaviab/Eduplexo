@@ -54,46 +54,37 @@ func TestCeilDaysUntil(t *testing.T) {
 	}
 }
 
-// TestCheckStudentLimitStoreAggregation verifies the fallback enforcement
-// aggregates capacity across every school owned by the same owner — the
-// in-memory mirror of the DB advisory-lock path.
-func TestCheckStudentLimitStoreAggregation(t *testing.T) {
+// TestCheckStudentLimitStore verifies school-scoped capacity limits in the
+// in-memory store fallback path.
+func TestCheckStudentLimitStore(t *testing.T) {
 	now := time.Now()
 	s := store.New()
 	h := &Handler{Store: s}
 
 	s.Lock()
 	s.Schools = append(s.Schools,
-		&store.School{ID: "sch1", SchoolID: "SCH-A", OwnerUserID: "own1"},
-		&store.School{ID: "sch2", SchoolID: "SCH-B", OwnerUserID: "own1"},
+		&store.School{ID: "sch1", SchoolID: "SCH-A"},
 	)
-	s.OwnerSchools = append(s.OwnerSchools,
-		&store.OwnerSchool{ID: "os1", OwnerUserID: "own1", SchoolID: "SCH-A"},
-		&store.OwnerSchool{ID: "os2", OwnerUserID: "own1", SchoolID: "SCH-B"},
-	)
-	// One growth subscription for the owner, 500 limit.
+	// One growth subscription for the school, 500 limit.
 	s.Subscriptions = append(s.Subscriptions, &store.Subscription{
 		ID: "sub1", SchoolID: "SCH-A", PackageID: "growth", StudentLimit: 500,
 		Status: "active", NextRenewal: now.AddDate(0, 0, 20), CreatedAt: now, UpdatedAt: now,
 	})
-	// 300 students across both schools (100 + 200).
-	for i := 0; i < 100; i++ {
+	// 300 active students in SCH-A.
+	for i := 0; i < 300; i++ {
 		s.Students = append(s.Students, &store.Student{ID: store.NewID("stu"), SchoolID: "SCH-A", Status: "active"})
-	}
-	for i := 0; i < 200; i++ {
-		s.Students = append(s.Students, &store.Student{ID: store.NewID("stu"), SchoolID: "SCH-B", Status: "active"})
 	}
 	s.Unlock()
 
 	// 300/500 → allowed (no error), release is nil in store path.
-	if _, err := h.checkStudentLimitStore(context.Background(), "SCH-B"); err != nil {
+	if _, err := h.checkStudentLimitStore(context.Background(), "SCH-A"); err != nil {
 		t.Fatalf("expected allowed at 300/500, got %v", err)
 	}
 
-	// Push to 500 and verify the 501st is denied even from the other school.
+	// Push to 500 and verify the 501st is denied.
 	s.Lock()
 	for i := 0; i < 200; i++ {
-		s.Students = append(s.Students, &store.Student{ID: store.NewID("stu"), SchoolID: "SCH-B", Status: "active"})
+		s.Students = append(s.Students, &store.Student{ID: store.NewID("stu"), SchoolID: "SCH-A", Status: "active"})
 	}
 	s.Unlock()
 

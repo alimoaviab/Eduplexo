@@ -174,29 +174,6 @@ func GetActiveSubscriptionHelper(ctx context.Context, pool *pgxpool.Pool, s *sto
 			return &sub, nil
 		}
 
-		// Owner multi-school subscription inheritance query in DB
-		err = pool.QueryRow(ctx, `
-			SELECT sub.id, sub.school_id, sub.plan_name, sub.student_limit, sub.price, sub.currency, sub.start_date, sub.end_date,
-			       sub.status, sub.is_trial, sub.trial_used, sub.trial_start_date, sub.trial_end_date, sub.grace_ends_at, sub.created_at, sub.updated_at
-			FROM subscriptions sub
-			LEFT JOIN schools s ON s.school_id = sub.school_id
-			WHERE (s.owner_user_id = (SELECT owner_user_id FROM schools WHERE school_id = $1 LIMIT 1)
-			       OR s.owner_email = (SELECT owner_email FROM schools WHERE school_id = $1 AND owner_email <> '' LIMIT 1)
-			       OR sub.owner_user_id = (SELECT owner_user_id FROM schools WHERE school_id = $1 LIMIT 1))
-			  AND sub.status IN ('active', 'trial')
-			ORDER BY sub.created_at DESC LIMIT 1
-		`, schoolID).Scan(
-			&sub.ID, &sub.SchoolID, &sub.PlanName, &sub.StudentLimit, &sub.Price, &sub.Currency,
-			&sub.StartDate, &sub.EndDate, &sub.Status, &sub.IsTrial, &sub.TrialUsed,
-			&trialStart, &trialEnd, &graceEnd, &sub.CreatedAt, &sub.UpdatedAt,
-		)
-		if err == nil {
-			sub.TrialStartDate = trialStart
-			sub.TrialEndDate = trialEnd
-			sub.GraceEndsAt = graceEnd
-			return &sub, nil
-		}
-
 		// Fallback for legacy schools with NO subscription row at all: derive
 		// the trial from the school's created_at (authoritative date) instead
 		// of inventing a fresh trial from NOW(). Schools with any subscription
@@ -245,35 +222,20 @@ func activeSubscriptionFromStoreHelper(s *store.MemStore, schoolID string) *Subs
 		}
 	}
 
-	// If no direct active subscription, check if school belongs to an owner with active subscriptions
+	// If no direct active subscription: school-without-row fallback derives
+	// the trial from the school's created_at so the countdown advances from a
+	// real date, never from NOW(). No cross-school inheritance: each school
+	// owns its own subscription exclusively.
 	if latest == nil {
-		var ownerUserID, ownerEmail string
 		var isSchoolActive bool
 		for _, sch := range s.Schools {
 			if sch.SchoolID == schoolID {
-				ownerUserID = sch.OwnerUserID
-				ownerEmail = sch.OwnerEmail
 				isSchoolActive = (sch.Status == "active" || sch.ApprovalStatus == "approved")
 				break
 			}
 		}
 
-		if ownerUserID != "" || ownerEmail != "" {
-			for _, sub := range s.Subscriptions {
-				if sub.Status == "active" || sub.Status == "trial" {
-					for _, sch := range s.Schools {
-						if sch.SchoolID == sub.SchoolID && (sch.OwnerUserID == ownerUserID || sch.OwnerEmail == ownerEmail) {
-							if latest == nil || sub.CreatedAt.After(latest.CreatedAt) {
-								latest = sub
-							}
-						}
-					}
-				}
-			}
-		}		// Default fallback for any active or owner-managed school with no
-		// subscription row: derive the trial from the school's created_at so
-		// the countdown advances from a real date, never from NOW().
-		if latest == nil && (isSchoolActive || ownerUserID != "" || ownerEmail != "") {
+		if isSchoolActive {
 		var created time.Time
 		for _, sch := range s.Schools {
 			if sch.SchoolID == schoolID {

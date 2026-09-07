@@ -10,8 +10,8 @@ import (
 
 // SubscriptionGate returns a middleware that checks the tenant's active subscription status.
 //
-//   - Suspended subscriptions block all non-billing routes for every role
-//     (owners keep billing/renewal access so they can recover).
+//   - Suspended subscriptions block all non-billing routes for every role.
+//     The School Admin keeps billing/renewal access so the school can recover.
 //   - Expired subscriptions inside the 3-day grace window remain operational
 //     (the UI shows the grace warning).
 //   - Active subscriptions additionally enforce package/module-level gating.
@@ -26,24 +26,7 @@ func SubscriptionGate(pool *pgxpool.Pool) func(http.Handler) http.Handler {
 
 			path := r.URL.Path
 
-			// Owners are the subscribers: enforce suspension on their entire
-			// portal but always keep billing/renewal reachable.
-			if ctx.Role == "owner" {
-				suspended, err := subscription.IsOwnerSubscriptionSuspended(r.Context(), pool, ctx.UserID)
-				if err != nil {
-					next.ServeHTTP(w, r)
-					return
-				}
-				if suspended && !subscription.IsExpiredAllowedAPI(path) {
-					api.WriteResult(w, api.Fail("SUBSCRIPTION_SUSPENDED",
-						"Your subscription is suspended. Please renew your plan to restore access.", 403, nil))
-					return
-				}
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			// Admin / teacher / student: resolve the owning school's state.
+			// Admin / teacher / student: resolve the school's subscription state.
 			active, err := subscription.IsSubscriptionActive(r.Context(), pool, nil, ctx.SchoolID)
 			if err != nil {
 				// Allow fallback in case of query errors to avoid hard-locking the system
@@ -57,7 +40,7 @@ func SubscriptionGate(pool *pgxpool.Pool) func(http.Handler) http.Handler {
 					next.ServeHTTP(w, r)
 					return
 				}
-				api.WriteResult(w, api.Fail("SUBSCRIPTION_EXPIRED", "Your school subscription has expired or is inactive. Please contact your school owner to renew.", 403, nil))
+				api.WriteResult(w, api.Fail("SUBSCRIPTION_EXPIRED", "Your school subscription has expired or is inactive. Please renew your plan to restore access.", 403, nil))
 				return
 			}
 

@@ -2,60 +2,22 @@ package auth
 
 import "testing"
 
-// TestOwnerIsNotAdmin locks in the core architectural invariant: the Owner
-// role is a multi-school governance role and must NOT be able to perform any
-// operational school-management action (students/teachers/classes/attendance/
-// homework/exams/results/fees/...). Every assertion here is a regression
-// guard against re-granting Admin powers to Owner.
-func TestOwnerIsNotAdmin(t *testing.T) {
-	ownerOnly := []struct {
-		feature Feature
-		action  Action
-	}{
-		{"schools", ActionCreate},
-		{"schools", ActionDelete},
-		{"users", ActionCreate}, // admin provisioning
-		{"settings", ActionView},
-		{"reports", ActionView},
-		{"notifications", ActionView},
+// TestOwnerRoleRemoved verifies the retired Owner role grants nothing:
+// CanAccess always returns false for role='owner', ensuring any legacy
+// session fails all permission checks.
+func TestOwnerRoleRemoved(t *testing.T) {
+	features := []Feature{
+		"schools", "users", "settings", "reports", "notifications",
+		"students", "subjects", "classes", "attendance", "homework",
+		"exams", "results", "fees", "timetable", "behavior", "events",
+		"leave", "certificates", "expenses", "audit_logs",
 	}
-	for _, tc := range ownerOnly {
-		if !CanAccess("owner", tc.feature, tc.action) {
-			t.Errorf("owner should be able to %s %s", tc.action, tc.feature)
-		}
-	}
-
-	// Owner must be denied every operational Admin feature — view AND write.
-	denied := []struct {
-		feature Feature
-		action  Action
-	}{
-		{"students", ActionView},
-		{"students", ActionCreate},
-		{"students", ActionUpdate},
-		{"students", ActionDelete},
-		{"teachers", ActionCreate},
-		{"classes", ActionCreate},
-		{"subjects", ActionCreate},
-		{"attendance", ActionCreate},
-		{"attendance", ActionView},
-		{"homework", ActionCreate},
-		{"exams", ActionCreate},
-		{"results", ActionCreate},
-		{"fees", ActionCreate},
-		{"fees", ActionView},
-		{"timetable", ActionCreate},
-		{"announcements", ActionCreate},
-		{"behavior", ActionCreate},
-		{"leave", ActionCreate},
-		{"events", ActionCreate},
-		{"certificates", ActionCreate},
-		{"expenses", ActionCreate},
-		{"audit_logs", ActionView},
-	}
-	for _, tc := range denied {
-		if CanAccess("owner", tc.feature, tc.action) {
-			t.Errorf("owner must NOT be able to %s %s", tc.action, tc.feature)
+	actions := []Action{ActionView, ActionCreate, ActionUpdate, ActionDelete, ActionManage}
+	for _, f := range features {
+		for _, a := range actions {
+			if CanAccess("owner", f, a) {
+				t.Errorf("retired owner role must NOT %s %s", a, f)
+			}
 		}
 	}
 }

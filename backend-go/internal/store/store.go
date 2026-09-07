@@ -191,15 +191,7 @@ func EnsureBootstrapUsers(s *MemStore) {
 		superPassword = "Test@123"
 	}
 
-	// Owner credentials
-	ownerEmail := strings.ToLower(strings.TrimSpace(os.Getenv("EDUPLEXO_OWNER_EMAIL")))
-	if ownerEmail == "" {
-		ownerEmail = "owner@gmail.com"
-	}
-	ownerPassword := os.Getenv("EDUPLEXO_OWNER_PASSWORD")
-	if ownerPassword == "" {
-		ownerPassword = "Test@123"
-	}
+	// The Owner role is retired — no owner bootstrap user is ever created.
 
 	s.Lock()
 	defer s.Unlock()
@@ -209,7 +201,6 @@ func EnsureBootstrapUsers(s *MemStore) {
 	// Check existing users and update roles/passwords
 	var superUser *User
 	var schoolUser *User
-	var ownerUser *User
 	for _, u := range s.Users {
 		if u.Email == superEmail {
 			u.Role = "super_admin"
@@ -218,9 +209,6 @@ func EnsureBootstrapUsers(s *MemStore) {
 		}
 		if u.Email == schoolEmail && u.Role == "admin" {
 			schoolUser = u
-		}
-		if u.Email == ownerEmail && u.Role == "owner" {
-			ownerUser = u
 		}
 	}
 
@@ -254,14 +242,13 @@ func EnsureBootstrapUsers(s *MemStore) {
 	}
 	if !hasDefaultSchool {
 		s.Schools = append(s.Schools, &School{
-			ID:         NewID("sch"),
-			SchoolID:   schoolID,
-			Name:       "Eduplexo Academy",
-			Code:       "MAIN",
-			OwnerEmail: ownerEmail,
-			Status:     "active",
-			CreatedAt:  now,
-			UpdatedAt:  now,
+			ID:        NewID("sch"),
+			SchoolID:  schoolID,
+			Name:      "Eduplexo Academy",
+			Code:      "MAIN",
+			Status:    "active",
+			CreatedAt: now,
+			UpdatedAt: now,
 		})
 
 		// Also create a default academic year for this school
@@ -364,24 +351,8 @@ func EnsureBootstrapUsers(s *MemStore) {
 		})
 	}
 
-	if ownerUser != nil {
-		hash, _ := auth.HashPassword(ownerPassword)
-		ownerUser.PasswordHash = hash
-	} else {
-		hash, _ := auth.HashPassword(ownerPassword)
-		s.Users = append(s.Users, &User{
-			ID:           NewID("user"),
-			SchoolID:     "system", // Owners are stored under system scope
-			Email:        ownerEmail,
-			PasswordHash: hash,
-			Role:         "owner",
-			Permissions:  []string{"*"},
-			Status:       "active",
-			Profile:      UserProfile{FirstName: "Platform", LastName: "Owner"},
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		})
-	}
+	// Legacy owner rows (pre-migration databases) are left untouched here;
+	// SQL migration 000042 converts them to disabled School Admin records.
 }
 
 // bootstrapAdmin guarantees there is at least one school + admin user so the

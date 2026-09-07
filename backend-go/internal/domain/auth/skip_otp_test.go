@@ -27,11 +27,12 @@ func TestSignup_SkipOTP_AnonymousCannotDirectCreate(t *testing.T) {
 	superadmin.SetPlatformSettings(modifiedSettings)
 
 	signupPayload := map[string]any{
-		"fullName": "Direct Owner",
-		"email":    "direct_owner@example.com",
-		"password": "Password123!",
-		"phone":    "+923001234567",
-		"role":     "owner",
+		"fullName":   "Direct Admin",
+		"schoolName": "Direct School",
+		"email":      "direct_admin@example.com",
+		"password":   "Password123!",
+		"phone":      "+923001234567",
+		"role":       "admin",
 	}
 	body, _ := json.Marshal(signupPayload)
 	req := httptest.NewRequest("POST", "/api/auth/signup", bytes.NewReader(body))
@@ -67,13 +68,13 @@ func TestSignup_SkipOTP_AnonymousCannotDirectCreate(t *testing.T) {
 	memStore.RLock()
 	defer memStore.RUnlock()
 	for _, u := range memStore.Users {
-		if u.Email == "direct_owner@example.com" {
+		if u.Email == "direct_admin@example.com" {
 			t.Fatalf("expected NO active user created for anonymous signup, found %+v", u)
 		}
 	}
 	pendingFound := false
 	for _, ps := range memStore.PendingSignups {
-		if ps.Email == "direct_owner@example.com" {
+		if ps.Email == "direct_admin@example.com" {
 			pendingFound = true
 		}
 	}
@@ -123,11 +124,12 @@ func TestSignup_SkipOTP_SuperAdminCanDirectCreate(t *testing.T) {
 	}
 
 	signupPayload := map[string]any{
-		"fullName": "Onboarded Owner",
-		"email":    "onboarded_owner@example.com",
-		"password": "Password123!",
-		"phone":    "+923001234567",
-		"role":     "owner",
+		"fullName":   "Onboarded Admin",
+		"schoolName": "Onboarded School",
+		"email":      "onboarded_admin@example.com",
+		"password":   "Password123!",
+		"phone":      "+923001234567",
+		"role":       "admin",
 	}
 	body, _ := json.Marshal(signupPayload)
 	req := httptest.NewRequest("POST", "/api/auth/signup", bytes.NewReader(body))
@@ -155,8 +157,8 @@ func TestSignup_SkipOTP_SuperAdminCanDirectCreate(t *testing.T) {
 	if data["token"] == nil || data["token"] == "" {
 		t.Fatalf("expected active auth session token in response when SkipOTP is enabled")
 	}
-	if data["email"] != "onboarded_owner@example.com" {
-		t.Fatalf("expected email 'onboarded_owner@example.com', got %v", data["email"])
+	if data["email"] != "onboarded_admin@example.com" {
+		t.Fatalf("expected email 'onboarded_admin@example.com', got %v", data["email"])
 	}
 
 	// Verify NO email was dispatched via Brevo
@@ -164,12 +166,12 @@ func TestSignup_SkipOTP_SuperAdminCanDirectCreate(t *testing.T) {
 		t.Fatalf("expected NO email to be dispatched when SkipOTP is enabled, but found: %v", mockEmail.lastSent())
 	}
 
-	// Verify user is created directly in Store with active status and owner role
+	// Verify user is created directly in Store with active status and admin role
 	memStore.RLock()
 	defer memStore.RUnlock()
 	var foundUser *store.User
 	for _, u := range memStore.Users {
-		if u.Email == "onboarded_owner@example.com" {
+		if u.Email == "onboarded_admin@example.com" {
 			foundUser = u
 			break
 		}
@@ -181,22 +183,20 @@ func TestSignup_SkipOTP_SuperAdminCanDirectCreate(t *testing.T) {
 	if foundUser.Status != "active" {
 		t.Fatalf("expected user status to be 'active', got '%s'", foundUser.Status)
 	}
-	if foundUser.Role != "owner" {
-		t.Fatalf("expected user role to be 'owner', got '%s'", foundUser.Role)
+	if foundUser.Role != "admin" {
+		t.Fatalf("expected user role to be 'admin', got '%s'", foundUser.Role)
 	}
 
 	// Verify no pending signup was created
 	for _, ps := range memStore.PendingSignups {
-		if ps.Email == "onboarded_owner@example.com" {
+		if ps.Email == "onboarded_admin@example.com" {
 			t.Fatalf("expected NO pending signup record when SkipOTP is enabled, found one: %v", ps)
 		}
 	}
 }
 
-func TestSignup_AdminRoleRejectedForSelfService(t *testing.T) {
-	// Regression for F-01: an unauthenticated caller must never be able to
-	// mint an `admin` (or `super_admin`) account via the public signup endpoint
-	// — even with the SkipOTP flag enabled.
+func TestSignup_PrivilegedRolesRejectedForSelfService(t *testing.T) {
+	// Privileged/retired roles (super_admin, owner) must never be minted via self-service signup
 	h, memStore, _ := setupTestAuthHandler()
 
 	origSettings := superadmin.GetPlatformSettings()
@@ -205,9 +205,9 @@ func TestSignup_AdminRoleRejectedForSelfService(t *testing.T) {
 	modifiedSettings.SkipOTP = true
 	superadmin.SetPlatformSettings(modifiedSettings)
 
-	for _, role := range []string{"admin", "super_admin"} {
+	for _, role := range []string{"super_admin", "owner"} {
 		signupPayload := map[string]any{
-			"fullName": "Evil Admin",
+			"fullName": "Evil Actor",
 			"email":    "evil_" + role + "@example.com",
 			"password": "Password123!",
 			"role":     role,
@@ -226,7 +226,7 @@ func TestSignup_AdminRoleRejectedForSelfService(t *testing.T) {
 	memStore.RLock()
 	defer memStore.RUnlock()
 	for _, u := range memStore.Users {
-		if u.Email == "evil_admin@example.com" || u.Email == "evil_super_admin@example.com" {
+		if u.Email == "evil_owner@example.com" || u.Email == "evil_super_admin@example.com" {
 			t.Fatalf("FAIL: privileged account created via self-service signup: %+v", u)
 		}
 	}

@@ -220,46 +220,14 @@ func (h *Handler) resolveSchoolID(ctx *api.RequestContext) string {
 	if ctx.SchoolID != "" && ctx.SchoolID != "system" && ctx.SchoolID != "__global__" {
 		return ctx.SchoolID
 	}
-	if h.Pool != nil {
-		var sID string
-		err := h.Pool.QueryRow(context.Background(), `
-			SELECT school_id FROM schools 
-			WHERE (owner_email = $1 OR owner_user_id = $2) AND school_id NOT IN ('system', '__global__')
-			ORDER BY created_at ASC LIMIT 1
-		`, ctx.ActorEmail, ctx.UserID).Scan(&sID)
-		if err == nil && sID != "" {
-			return sID
-		}
-		// Also check owner_schools junction
-		err = h.Pool.QueryRow(context.Background(), `
-			SELECT school_id FROM owner_schools
-			WHERE owner_user_id = $1 AND school_id NOT IN ('system', '__global__')
-			ORDER BY created_at ASC LIMIT 1
-		`, ctx.UserID).Scan(&sID)
-		if err == nil && sID != "" {
-			return sID
-		}
-	}
-	if h.Store != nil {
+	// Super Admin has no tenant of their own; the subscription endpoints are
+	// tenant tools, so fall back to the first real school for platform views.
+	if ctx.Role == "super_admin" && h.Store != nil {
 		h.Store.RLock()
 		defer h.Store.RUnlock()
-		for _, os := range h.Store.OwnerSchools {
-			if os.OwnerUserID == ctx.UserID && os.SchoolID != "" && os.SchoolID != "system" && os.SchoolID != "__global__" {
-				return os.SchoolID
-			}
-		}
 		for _, s := range h.Store.Schools {
 			if s.SchoolID != "" && s.SchoolID != "system" && s.SchoolID != "__global__" {
-				if (s.OwnerEmail != "" && s.OwnerEmail == ctx.ActorEmail) || (s.OwnerUserID != "" && s.OwnerUserID == ctx.UserID) {
-					return s.SchoolID
-				}
-			}
-		}
-		if ctx.Role == "super_admin" {
-			for _, s := range h.Store.Schools {
-				if s.SchoolID != "" && s.SchoolID != "system" && s.SchoolID != "__global__" {
-					return s.SchoolID
-				}
+				return s.SchoolID
 			}
 		}
 	}
@@ -281,21 +249,9 @@ func (h *Handler) GetCurrent(w http.ResponseWriter, r *http.Request) {
 // the database. All dates, remaining days, phases, and payment state come
 // from here — the frontend renders them as-is.
 func (h *Handler) getCurrentPG(r *http.Request, ctx *api.RequestContext, schoolID string) (CurrentResponse, error) {
-	var scope OwnerScope
-	var err error
-	if ctx != nil && ctx.Role == "owner" {
-		scope, err = ResolveOwnerScopeByUser(r.Context(), h.Pool, ctx.UserID)
-	} else {
-		scope, err = ResolveOwnerScope(r.Context(), h.Pool, schoolID)
-	}
+	scope, err := ResolveSchoolScope(r.Context(), h.Pool, schoolID)
 	if err != nil {
 		return CurrentResponse{}, err
-	}
-
-	// New owners (no subscription row yet) get their real, DB-backed trial.
-	if ctx != nil && ctx.Role == "owner" {
-		_ = EnsureOwnerTrial(r.Context(), h.Pool, ctx.UserID)
-		scope, _ = ResolveOwnerScopeByUser(r.Context(), h.Pool, ctx.UserID)
 	}
 
 	// Advance state lazily (expiry → grace → suspension; approved payment → active).
@@ -303,15 +259,21 @@ func (h *Handler) getCurrentPG(r *http.Request, ctx *api.RequestContext, schoolI
 		log.Printf("[subscription] reconcile failed: %v", err)
 	}
 
-	sub, err := GetOwnerSubscription(r.Context(), h.Pool, scope)
+	sub, err := GetSchoolSubscription(r.Context(), h.Pool, scope)
 	if err != nil {
 		return CurrentResponse{}, err
+	}
+
+	// Schools with no subscription row yet get their real, DB-backed trial.
+	if sub == nil {
+		_ = EnsureSchoolTrial(r.Context(), h.Pool, schoolID)
+		sub, _ = GetSchoolSubscription(r.Context(), h.Pool, scope)
 	}
 	if sub != nil && (sub.Status == "trial" || sub.IsTrial) {
 		sub.PlanName = "trial"
 	}
 
-	studentsUsed, err := CountActiveStudentsInScope(r.Context(), h.Pool, scope)
+	studentsUsed, err := CountActiveStudents(r.Context(), h.Pool, schoolID)
 	if err != nil {
 		return CurrentResponse{}, err
 	}
@@ -342,7 +304,7 @@ func (h *Handler) getCurrentPG(r *http.Request, ctx *api.RequestContext, schoolI
 	}
 
 	isExpired := phase == PhaseExpired || phase == PhaseGrace || phase == PhaseSuspended || phase == PhaseTrialExpired
-	canTrial, err := IsTrialAvailable(r.Context(), h.Pool, h.Store, scope.PrimarySchool())
+	canTrial, err := IsTrialAvailable(r.Context(), h.Pool, h.Store, schoolID)
 	if err != nil {
 		canTrial = false
 	}
@@ -358,9 +320,9 @@ func (h *Handler) getCurrentPG(r *http.Request, ctx *api.RequestContext, schoolI
 			SELECT id, school_id, plan_id, COALESCE(payment_method_id,''), COALESCE(screenshot_url,''),
 			       transaction_id, amount, status, submitted_at, COALESCE(notes,'')
 			FROM payment_requests
-			WHERE (school_id = ANY($1) OR school_id = $2) AND status = 'pending'
+			WHERE school_id = $1 AND status = 'pending'
 			ORDER BY submitted_at DESC LIMIT 1
-		`, scope.SchoolIDs, scope.OwnerUserID).Scan(
+		`, schoolID).Scan(
 			&p.ID, &p.SchoolID, &p.PlanID, &p.PaymentMethodID, &p.ScreenshotURL,
 			&p.TransactionID, &p.Amount, &p.Status, &p.SubmittedAt, &p.Notes,
 		)
@@ -390,7 +352,7 @@ func (h *Handler) getCurrentPG(r *http.Request, ctx *api.RequestContext, schoolI
 		nextPlanStart = &start
 	}
 
-	// ── Custom-plan state (negotiated owner contract) ───────────────────
+	// ── Custom-plan state (negotiated school contract) ───────────────────
 	currentPlanIsCustom := false
 	customPlanEnding := false
 	var customPlanEndsAt *time.Time
@@ -419,10 +381,10 @@ func (h *Handler) getCurrentPG(r *http.Request, ctx *api.RequestContext, schoolI
 		var start time.Time
 		if err := h.Pool.QueryRow(r.Context(), `
 			SELECT plan_id, plan_name, start_date FROM subscriptions
-			WHERE (school_id = ANY($1) OR owner_user_id = $2)
+			WHERE school_id = $1
 			  AND status = 'scheduled' AND start_date > NOW()
 			ORDER BY start_date ASC LIMIT 1
-		`, scope.SchoolIDs, scope.OwnerUserID).Scan(&spID, &spName, &start); err == nil {
+		`, schoolID).Scan(&spID, &spName, &start); err == nil {
 			scheduledPlan = spName
 			if scheduledPlan == "" {
 				scheduledPlan = spID
@@ -597,19 +559,12 @@ func (h *Handler) getCurrentStore(r *http.Request, ctx *api.RequestContext, scho
 
 func (h *Handler) GetPlans(w http.ResponseWriter, r *http.Request) {
 	if h.Pool != nil {
-		// Owner-scoped custom plans: only the authenticated OWNER sees their
-		// own negotiated contracts. Admins/teachers/super_admins never do.
+		// School-scoped custom plans: an authenticated school admin sees their
+		// own negotiated contracts. Teachers/students/super_admins do not.
 		ctx := api.FromRequest(r)
 		ownerID := ""
-		if ctx != nil {
-			if ctx.Role == "owner" && ctx.UserID != "" {
-				ownerID = ctx.UserID
-			} else if ctx.SchoolID != "" && ctx.SchoolID != "system" && ctx.SchoolID != "__global__" {
-				_ = h.Pool.QueryRow(r.Context(), `
-					SELECT COALESCE(owner_user_id, '') FROM schools
-					WHERE school_id = $1 OR id = $1 LIMIT 1
-				`, ctx.SchoolID).Scan(&ownerID)
-			}
+		if ctx != nil && ctx.Role == "admin" && ctx.UserID != "" {
+			ownerID = ctx.UserID
 		}
 		rows, err := h.Pool.Query(r.Context(), `
 			SELECT sp.id, sp.name, sp.student_limit, sp.price, COALESCE(sp.currency,'PKR'),
@@ -727,7 +682,8 @@ func (h *Handler) StartTrial(w http.ResponseWriter, r *http.Request) {
 		}
 
 		ownerID := ""
-		if ctx != nil {
+		if ctx != nil && ctx.Role == "admin" {
+			// The subscribing School Admin is the customer of record.
 			ownerID = ctx.UserID
 		}
 
@@ -939,13 +895,10 @@ func (h *Handler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		durationDays := 30
 
 		// A subscriber may only choose a public standard plan or their OWN
-		// negotiated custom contract — never another owner's.
+		// negotiated custom contract — never another school's.
 		ownerScopeID := ""
-		if h.Pool != nil {
-			scope, err := ResolveOwnerScope(r.Context(), h.Pool, schoolID)
-			if err == nil {
-				ownerScopeID = scope.OwnerUserID
-			}
+		if ctx != nil {
+			ownerScopeID = ctx.UserID
 		}
 
 		if h.Pool != nil {
@@ -983,9 +936,8 @@ func (h *Handler) Upgrade(w http.ResponseWriter, r *http.Request) {
 
 		// Safe downgrade guard: never silently shrink capacity below current usage.
 		if h.Pool != nil {
-			scope, err := ResolveOwnerScope(r.Context(), h.Pool, schoolID)
-			if err == nil {
-				used, err := CountActiveStudentsInScope(r.Context(), h.Pool, scope)
+			{
+				used, err := CountActiveStudents(r.Context(), h.Pool, schoolID)
 				if err == nil && used > studentLimit {
 					return nil, api.NewControlledError("CAPACITY_CONFLICT",
 						fmt.Sprintf("Cannot switch to %s: your current student count (%d) exceeds this plan's capacity (%d). Please reduce enrolled students first or choose a higher plan.", displayName, used, studentLimit),
@@ -1000,8 +952,8 @@ func (h *Handler) Upgrade(w http.ResponseWriter, r *http.Request) {
 			// Deactivate current subscription (history rows are kept)
 			_, _ = h.Pool.Exec(r.Context(), `
 				UPDATE subscriptions SET status = 'cancelled', updated_at = NOW()
-				WHERE (school_id = $1 OR owner_user_id = $2) AND status IN ('active', 'trial', 'scheduled')
-			`, schoolID, ctx.UserID)
+				WHERE school_id = $1 AND status IN ('active', 'trial', 'scheduled')
+			`, schoolID)
 		}
 
 		// Create new subscription for the billing interval
@@ -1020,7 +972,6 @@ func (h *Handler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		sub := &Subscription{
 			ID:           id,
 			SchoolID:     schoolID,
-			OwnerUserID:  ctx.UserID,
 			PlanID:       planID,
 			PlanName:     displayName,
 			StudentLimit: studentLimit,
@@ -1038,8 +989,8 @@ func (h *Handler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		if h.Pool != nil {
 			_, err := h.Pool.Exec(r.Context(), `
 				INSERT INTO subscriptions (id, school_id, owner_user_id, plan_id, plan_name, student_limit, price, currency, start_date, end_date, status, is_trial, trial_used, created_at, updated_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-			`, sub.ID, sub.SchoolID, sub.OwnerUserID, sub.PlanID, sub.PlanName, sub.StudentLimit, sub.Price, sub.Currency,
+				VALUES ($1, $2, '', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			`, sub.ID, sub.SchoolID, sub.PlanID, sub.PlanName, sub.StudentLimit, sub.Price, sub.Currency,
 				sub.StartDate, sub.EndDate, sub.Status, sub.IsTrial, sub.TrialUsed,
 				sub.CreatedAt, sub.UpdatedAt)
 			if err != nil {
@@ -1089,23 +1040,7 @@ func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
 
 		var rows pgx.Rows
 		var err error
-		if ctx.Role == "owner" {
-			// Query only history for schools and subscription events that belong to this owner
-			rows, err = h.Pool.Query(r.Context(), `
-				SELECT id, school_id, plan_name, student_limit, amount, payment_status, start_date, end_date, action, created_at
-				FROM subscription_history
-				WHERE owner_user_id = $1
-				   OR school_id IN (
-					SELECT school_id FROM owner_schools WHERE owner_user_id = $1
-					UNION
-					SELECT school_id FROM schools WHERE (owner_user_id = $1 OR owner_email = $2) AND school_id NOT IN ('system', '__global__')
-					UNION
-					SELECT $1
-				   )
-				ORDER BY created_at DESC
-				LIMIT 50
-			`, ctx.UserID, ctx.ActorEmail)
-		} else if targetSchoolID != "" && targetSchoolID != "system" && targetSchoolID != "__global__" {
+		if targetSchoolID != "" && targetSchoolID != "system" && targetSchoolID != "__global__" {
 			rows, err = h.Pool.Query(r.Context(), `
 				SELECT id, school_id, plan_name, student_limit, amount, payment_status, start_date, end_date, action, created_at
 				FROM subscription_history
@@ -1173,29 +1108,11 @@ func (h *Handler) GetReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Security: Super Admin has global access; Owners only have access to their own receipts
+	// Security: Super Admin has global access; school users only see their
+	// own school's receipts.
 	if ctx.Role != "super_admin" {
-		if ctx.Role == "owner" {
-			isOwner := pOwner == ctx.UserID
-			if !isOwner {
-				var owned bool
-				_ = h.Pool.QueryRow(r.Context(), `
-					SELECT EXISTS (
-						SELECT 1 FROM schools WHERE (owner_user_id = $1 OR owner_email = $2) AND (school_id = $3 OR id = $3)
-						UNION
-						SELECT 1 FROM owner_schools WHERE owner_user_id = $1 AND school_id = $3
-						UNION
-						SELECT 1 WHERE $1 = $3
-					)
-				`, ctx.UserID, ctx.ActorEmail, pSchool).Scan(&owned)
-				isOwner = owned
-			}
-			if !isOwner {
-				api.WriteResult(w, api.Fail("FORBIDDEN", "You do not have permission to view this receipt.", 403, nil))
-				return
-			}
-		} else {
-			api.WriteResult(w, api.Fail("FORBIDDEN", "Access denied.", 403, nil))
+		if pSchool == "" || pSchool != ctx.SchoolID {
+			api.WriteResult(w, api.Fail("FORBIDDEN", "You do not have permission to view this receipt.", 403, nil))
 			return
 		}
 	}
@@ -1204,7 +1121,7 @@ func (h *Handler) GetReceipt(w http.ResponseWriter, r *http.Request) {
 }
 
 // ─── STUDENT LIMIT CHECK (called by students handler) ────────────────────
-// Implemented in lifecycle.go (owner-wide aggregation + advisory lock).
+// Implemented in lifecycle.go (school-scoped capacity + advisory lock).
 
 func (h *Handler) countActiveStudents(schoolID string) int {
 	// Try PG first
@@ -1234,19 +1151,10 @@ func (h *Handler) recordHistory(ctx context.Context, schoolID, planName string, 
 	if h.Pool == nil {
 		return
 	}
-	ownerID := ""
-	reqCtx := api.FromContext(ctx)
-	if reqCtx != nil && reqCtx.Role == "owner" && reqCtx.UserID != "" {
-		ownerID = reqCtx.UserID
-	} else if schoolID != "" && schoolID != "system" && schoolID != "__global__" {
-		_ = h.Pool.QueryRow(ctx, `
-			SELECT COALESCE(owner_user_id, '') FROM schools WHERE school_id = $1 OR id = $1 LIMIT 1
-		`, schoolID).Scan(&ownerID)
-	}
 	_, err := h.Pool.Exec(ctx, `
 		INSERT INTO subscription_history (id, school_id, plan_name, student_limit, amount, payment_status, start_date, end_date, action, created_at, owner_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10)
-	`, store.NewID("sh"), schoolID, planName, studentLimit, amount, paymentStatus, start, end, action, ownerID)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), '')
+	`, store.NewID("sh"), schoolID, planName, studentLimit, amount, paymentStatus, start, end, action)
 	if err != nil {
 		log.Printf("[subscription] history record failed: %v", err)
 	}
