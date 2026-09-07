@@ -47,27 +47,7 @@ type NavGroup = {
 };
 
 const ownerNavGroups: NavGroup[] = [
-  {
-    label: "Executive",
-    items: [
-      { label: "Dashboard", href: "/owner/dashboard", icon: "dashboard" },
-      { label: "My Schools", href: "/owner/schools", icon: "domain" },
-      { label: "Portfolio Analytics", href: "/owner/analytics", icon: "analytics" },
-      { label: "Alerts & Insights", href: "/owner/alerts", icon: "notifications" },
-    ],
-  },
-  {
-    label: "Finance",
-    items: [
-      { label: "Ledger", href: "/owner/ledger", icon: "account_balance_wallet" },
-      { label: "Finance & Budgets", href: "/owner/finance", icon: "account_balance" },
-    ],
-  },
-  {
-    label: "Billing",
-    items: [{ label: "Subscription", href: "/owner/subscription", icon: "card_membership" }],
-  },
-];
+
 
 const adminNavGroups: NavGroup[] = [
   {
