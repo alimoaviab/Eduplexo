@@ -143,11 +143,12 @@ export function SignupPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
+          schoolName: formData.schoolName.trim(),
           fullName: formData.fullName.trim(),
           phone: formData.phone.trim(),
           email: formData.email.trim(),
           password: formData.password,
-          role: "owner"
+          role: "admin"
         }),
       });
 
@@ -172,16 +173,12 @@ export function SignupPage() {
         localStorage.removeItem("student_id");
 
         localStorage.setItem("token", data.token);
-        if (data.role !== "owner" && data.school_id && data.school_id !== "system") {
+        if (data.school_id && data.school_id !== "system") {
           localStorage.setItem("active_school_id", data.school_id);
         }
         window.dispatchEvent(new Event("auth-changed"));
         setTimeout(() => {
-          if (data.role === "owner") {
-            navigate("/owner/dashboard", { replace: true });
-          } else {
-            navigate("/admin/dashboard", { replace: true });
-          }
+          navigate("/admin/dashboard", { replace: true });
         }, 800);
         return;
       }
@@ -260,16 +257,12 @@ export function SignupPage() {
         localStorage.removeItem("student_id");
 
         localStorage.setItem("token", result.data.token);
-        if (result.data.role !== "owner" && result.data.school_id && result.data.school_id !== "system") {
+        if (result.data.school_id && result.data.school_id !== "system") {
           localStorage.setItem("active_school_id", result.data.school_id);
         }
         window.dispatchEvent(new Event("auth-changed"));
         setTimeout(() => {
-          if (result.data.role === "owner") {
-            navigate("/owner/dashboard", { replace: true });
-          } else {
-            navigate("/admin/dashboard", { replace: true });
-          }
+          navigate("/admin/dashboard", { replace: true });
         }, 800);
       } else {
         setTimeout(() => navigate("/auth/login"), 800);
@@ -416,8 +409,8 @@ export function SignupPage() {
 
             {stage === "form" ? (
               <>
-                <h2 className="text-3xl font-black text-gray-900 mb-1 tracking-tight">Create Owner Account</h2>
-                <p className="text-gray-500 font-medium text-xs">Enter owner details below to register your account</p>
+                <h2 className="text-3xl font-black text-gray-900 mb-1 tracking-tight">Create School Account</h2>
+                <p className="text-gray-500 font-medium text-xs">Enter your school and administrator details below</p>
               </>
             ) : (
               <>
@@ -447,13 +440,22 @@ export function SignupPage() {
                 onSubmit={handleSubmit}
               >
                 <Field 
-                  label="Owner Name" 
+                  label="School / Institution Name" 
+                  name="schoolName" 
+                  required 
+                  value={formData.schoolName} 
+                  onChange={handleChange} 
+                  placeholder="e.g. Beacon Heights Academy" 
+                  autoFocus 
+                />
+
+                <Field 
+                  label="Administrator Name" 
                   name="fullName" 
                   required 
                   value={formData.fullName} 
                   onChange={handleChange} 
                   placeholder="e.g. Aisha Khan" 
-                  autoFocus 
                 />
                 
                 <Field 
@@ -467,13 +469,13 @@ export function SignupPage() {
                 />
 
                 <Field 
-                  label="Email Address" 
+                  label="Official Email Address" 
                   name="email" 
                   type="email" 
                   required 
                   value={formData.email} 
                   onChange={handleChange} 
-                  placeholder="owner@example.com" 
+                  placeholder="admin@school.edu" 
                 />
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
