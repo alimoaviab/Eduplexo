@@ -75,20 +75,12 @@ export function useAuth() {
         }
         localStorage.setItem("last_user_id", payload.sub);
 
-        if (payload.role !== "owner") {
-          enforceSchoolBoundary(payload.school_id);
-          if (payload.school_id && payload.school_id !== "system") {
-            localStorage.setItem("active_school_id", payload.school_id);
-          }
+        enforceSchoolBoundary(payload.school_id);
+        if (payload.school_id && payload.school_id !== "system") {
+          localStorage.setItem("active_school_id", payload.school_id);
         }
 
-        // Owners are never school-scoped: their tenant context always comes
-        // from the token (sentinel "system"), never from localStorage
-        // (which could carry a stale school from a previous session or the
-        // removed context switcher).
-        const effectiveSchoolId = payload.role === "owner"
-          ? (payload.school_id || "system")
-          : payload.school_id;
+        const effectiveSchoolId = payload.school_id;
 
         const scopedKey = `academic_year_id:${effectiveSchoolId}`;
         const scopedYear = localStorage.getItem(scopedKey);
@@ -99,7 +91,7 @@ export function useAuth() {
           scopedYear || payload.active_academic_year_id || "";
         if (effectiveYear) {
           localStorage.setItem("academic_year_id", effectiveYear);
-        } else if (payload.role !== "owner") {
+        } else {
           localStorage.removeItem("academic_year_id");
         }
 
