@@ -183,6 +183,48 @@ func Router(cfg config.Config, s *store.MemStore, pg *persistence.Persister, rdb
 			r.Get("/eduplexo-extension/history/{id}", edxH.Detail)
 			r.Post("/eduplexo-extension/history/{id}/revert", edxH.Revert)
 
+			// School campuses listing (scoped to caller's school context)
+			r.Get("/campuses", func(w http.ResponseWriter, r *http.Request) {
+				ctx := api.FromRequest(r)
+				if ctx == nil {
+					api.WriteJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "message": "Authentication required"})
+					return
+				}
+				schoolID := ctx.SchoolID
+				if ctx.Role == "super_admin" {
+					if q := r.URL.Query().Get("school_id"); q != "" {
+						schoolID = q
+					}
+				}
+				s.RLock()
+				defer s.RUnlock()
+				var res []*store.Campus
+				for _, c := range s.Campuses {
+					if c.SchoolID == schoolID {
+						res = append(res, c)
+					}
+				}
+				if len(res) == 0 && schoolID != "" {
+					schoolName := "Main Campus"
+					for _, sc := range s.Schools {
+						if sc.SchoolID == schoolID || sc.ID == schoolID {
+							if sc.Name != "" {
+								schoolName = sc.Name
+							}
+							break
+						}
+					}
+					res = append(res, &store.Campus{
+						ID:       "cmp_" + schoolID,
+						SchoolID: schoolID,
+						Name:     schoolName,
+						Code:     "MAIN",
+						Status:   "active",
+					})
+				}
+				api.WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "data": res})
+			})
+
 			stH := students.NewPG(s, saveFn, pg.RuntimePool(), rdb)
 			// Subscription limit checker is set after subH is created below
 			r.Get("/students", stH.List)

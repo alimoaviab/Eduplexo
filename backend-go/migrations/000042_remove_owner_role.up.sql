@@ -172,6 +172,201 @@ WHERE derived.role = 'admin'
         AND other.id <> derived.id
   );
 
+-- ─── 3b. Promote secondary campuses into independent schools ─────────────
+-- Under the legacy Owner system, an owner could create additional campuses
+-- sharing the parent school_id (campuses table). Each operational campus must
+-- now become its own independent school context.
+CREATE TEMP TABLE _secondary_campuses ON COMMIT DROP AS
+SELECT c.id                                AS campus_id,
+       c.school_id                         AS parent_school_id,
+       c.name                              AS campus_name,
+       c.code                              AS campus_code,
+       c.address                           AS campus_address,
+       c.city                              AS campus_city,
+       c.phone                             AS campus_phone,
+       c.email                             AS campus_email,
+       c.status                            AS campus_status,
+       c.created_at                        AS campus_created_at,
+       'sch_' || regexp_replace(c.id, '^cmp_', '') AS new_school_id,
+       ps.owner_user_id                    AS parent_owner_user_id
+FROM (
+    SELECT c.*,
+           ROW_NUMBER() OVER (
+               PARTITION BY c.school_id
+               ORDER BY c.created_at ASC, c.id ASC
+           ) AS campus_rank
+    FROM campuses c
+    WHERE c.school_id NOT IN ('system', '__global__')
+      AND c.school_id <> ''
+) c
+JOIN schools ps ON ps.school_id = c.school_id
+WHERE c.campus_rank > 1;
+
+-- 1. Insert newly promoted schools
+INSERT INTO schools (
+    id, school_id, name, code, address, city, phone, email, status,
+    campus_type, created_at, updated_at
+)
+SELECT
+    'sch_' || sc.campus_id,
+    sc.new_school_id,
+    sc.campus_name,
+    COALESCE(NULLIF(sc.campus_code, ''), UPPER(SUBSTRING(sc.campus_name FROM 1 FOR 4))),
+    sc.campus_address,
+    sc.campus_city,
+    sc.campus_phone,
+    sc.campus_email,
+    sc.campus_status,
+    'main',
+    sc.campus_created_at,
+    NOW()
+FROM _secondary_campuses sc
+ON CONFLICT (school_id) DO NOTHING;
+
+-- 2. Remap the promoted campus row to its new school_id
+UPDATE campuses c
+SET school_id = sc.new_school_id,
+    updated_at = NOW()
+FROM _secondary_campuses sc
+WHERE c.id = sc.campus_id;
+
+-- 3. Remap dependent entities belonging to the promoted campus
+UPDATE users u
+SET school_id = sc.new_school_id,
+    updated_at = NOW()
+FROM _secondary_campuses sc
+WHERE u.campus_id = sc.campus_id AND u.school_id = sc.parent_school_id;
+
+UPDATE teachers t
+SET school_id = sc.new_school_id,
+    updated_at = NOW()
+FROM _secondary_campuses sc
+WHERE t.campus_id = sc.campus_id AND t.school_id = sc.parent_school_id;
+
+UPDATE students st
+SET school_id = sc.new_school_id,
+    updated_at = NOW()
+FROM _secondary_campuses sc
+WHERE st.campus_id = sc.campus_id AND st.school_id = sc.parent_school_id;
+
+UPDATE classes cl
+SET school_id = sc.new_school_id,
+    updated_at = NOW()
+FROM _secondary_campuses sc
+WHERE cl.campus_id = sc.campus_id AND cl.school_id = sc.parent_school_id;
+
+UPDATE attendance a
+SET school_id = sc.new_school_id,
+    updated_at = NOW()
+FROM _secondary_campuses sc
+WHERE a.campus_id = sc.campus_id AND a.school_id = sc.parent_school_id;
+
+UPDATE homework hw
+SET school_id = sc.new_school_id,
+    updated_at = NOW()
+FROM _secondary_campuses sc
+WHERE hw.campus_id = sc.campus_id AND hw.school_id = sc.parent_school_id;
+
+UPDATE exams ex
+SET school_id = sc.new_school_id,
+    updated_at = NOW()
+FROM _secondary_campuses sc
+WHERE ex.campus_id = sc.campus_id AND ex.school_id = sc.parent_school_id;
+
+UPDATE expenses exp
+SET school_id = sc.new_school_id,
+    updated_at = NOW()
+FROM _secondary_campuses sc
+WHERE exp.campus_id = sc.campus_id AND exp.school_id = sc.parent_school_id;
+
+-- 4. Remap fees for migrated students
+UPDATE fees f
+SET school_id = st.school_id,
+    updated_at = NOW()
+FROM students st
+JOIN _secondary_campuses sc ON st.campus_id = sc.campus_id
+WHERE f.student_id = st.id AND f.school_id = sc.parent_school_id;
+
+UPDATE fee_payments fp
+SET school_id = st.school_id,
+    updated_at = NOW()
+FROM students st
+JOIN _secondary_campuses sc ON st.campus_id = sc.campus_id
+WHERE fp.student_id = st.id AND fp.school_id = sc.parent_school_id;
+
+UPDATE fee_adjustments fa
+SET school_id = st.school_id,
+    updated_at = NOW()
+FROM students st
+JOIN _secondary_campuses sc ON st.campus_id = sc.campus_id
+WHERE fa.student_id = st.id AND fa.school_id = sc.parent_school_id;
+
+UPDATE student_fee_discounts sfd
+SET school_id = st.school_id,
+    updated_at = NOW()
+FROM students st
+JOIN _secondary_campuses sc ON st.campus_id = sc.campus_id
+WHERE sfd.student_id = st.id AND sfd.school_id = sc.parent_school_id;
+
+-- 5. Guarantee a School Admin exists for each newly promoted school
+INSERT INTO users (
+    id, school_id, email, password_hash, role, permissions,
+    profile_first, profile_last, profile_phone, status, created_at, updated_at
+)
+SELECT
+    'usr_admin_' || sc.new_school_id,
+    sc.new_school_id,
+    CASE
+        WHEN position('@' in u.email) > 1 THEN
+            split_part(u.email, '@', 1) || '+' || lower(regexp_replace(sc.new_school_id, '[^a-zA-Z0-9]', '', 'g')) || '@' || split_part(u.email, '@', 2)
+        ELSE 'admin+' || lower(regexp_replace(sc.new_school_id, '[^a-zA-Z0-9]', '', 'g')) || '@eduplexo.local'
+    END,
+    u.password_hash,
+    'admin',
+    ARRAY[]::TEXT[],
+    u.profile_first,
+    u.profile_last,
+    u.profile_phone,
+    'active',
+    NOW(),
+    NOW()
+FROM _secondary_campuses sc
+JOIN users u ON u.id = sc.parent_owner_user_id
+WHERE NOT EXISTS (
+    SELECT 1 FROM users ex
+    WHERE ex.school_id = sc.new_school_id AND ex.role = 'admin' AND ex.status = 'active'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- 6. Guarantee a subscription row for each newly promoted school
+INSERT INTO subscriptions (
+    id, school_id, owner_user_id, plan_name, student_limit, price, currency,
+    start_date, end_date, status, is_trial, trial_used, trial_start_date,
+    trial_end_date, created_at, updated_at
+)
+SELECT
+    'sub_promoted_' || sc.new_school_id,
+    sc.new_school_id,
+    '',
+    'trial',
+    500,
+    0,
+    'PKR',
+    sc.campus_created_at,
+    sc.campus_created_at + INTERVAL '14 days',
+    CASE WHEN sc.campus_created_at + INTERVAL '14 days' > NOW() THEN 'trial' ELSE 'expired' END,
+    true,
+    true,
+    sc.campus_created_at,
+    sc.campus_created_at + INTERVAL '14 days',
+    sc.campus_created_at,
+    sc.campus_created_at
+FROM _secondary_campuses sc
+WHERE NOT EXISTS (
+    SELECT 1 FROM subscriptions sub WHERE sub.school_id = sc.new_school_id
+)
+ON CONFLICT (id) DO NOTHING;
+
 -- ─── 4. Remap owner-keyed subscription rows to real schools ─────────────
 -- Legacy rows used school_id = owner_user_id (owner-keyed subscriptions).
 -- Remap them onto the owner's primary school. Guarded against the partial

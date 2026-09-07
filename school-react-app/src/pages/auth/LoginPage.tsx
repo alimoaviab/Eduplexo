@@ -8,24 +8,21 @@ import { motion } from "framer-motion";
 import { AppIcon } from "shared/ui/AppIcon";
 import { decodeJwtPayload } from "@/utils/jwt";
 
-type Role = "owner" | "admin" | "teacher" | "student";
+type Role = "admin" | "teacher" | "student";
 
 const ROLE_ICONS: Record<Role, React.ReactNode> = {
-  owner: <AppIcon name="Building2" size={20} />,
   admin: <AppIcon name="ShieldCheck" size={20} />,
   teacher: <AppIcon name="BookOpen" size={20} />,
   student: <AppIcon name="GraduationCap" size={20} />,
 };
 
 const ROLES: { key: Role; label: string }[] = [
-  { key: "owner", label: "Owner" },
   { key: "admin", label: "Admin" },
   { key: "teacher", label: "Teacher" },
   { key: "student", label: "Student" },
 ];
 
 const ROLE_ROUTES: Record<string, string> = {
-  owner: "/owner/dashboard",
   admin: "/admin/dashboard",
   super_admin: "/admin/dashboard",
   teacher: "/teacher/dashboard",
@@ -40,7 +37,6 @@ function resolveRoleRoute(role?: string): string {
 
 function suggestedTabForRole(role: string): Role {
   const r = role.toLowerCase();
-  if (r === "owner") return "owner";
   if (r === "teacher") return "teacher";
   if (r === "student") return "student";
   return "admin";
@@ -164,7 +160,7 @@ export function LoginPage() {
         localStorage.removeItem("student_id");
 
         localStorage.setItem("token", payload.token);
-        if (payload?.role !== "owner" && payload?.school_id && payload.school_id !== "system") {
+        if (payload?.school_id && payload.school_id !== "system") {
           localStorage.setItem("active_school_id", payload.school_id);
         }
         window.dispatchEvent(new Event("auth-changed"));
