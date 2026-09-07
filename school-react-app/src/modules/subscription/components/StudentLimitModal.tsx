@@ -20,7 +20,7 @@ interface StudentLimitModalProps {
 export function StudentLimitModal({ isOpen, onClose, currentCount, limit, planName }: StudentLimitModalProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isOwner = user?.role === "owner";
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
   if (!isOpen) return null;
 
@@ -46,9 +46,9 @@ export function StudentLimitModal({ isOpen, onClose, currentCount, limit, planNa
 
         {/* Description */}
         <p className="mt-3 text-gray-600 text-center text-sm">
-          {isOwner
-            ? "You have reached your subscription student limit. Please upgrade your plan to add more students."
-            : "Your school has reached its subscription student limit. Please contact your School Owner to upgrade the subscription plan to add more students."}
+          {isAdmin
+            ? "Your school has reached its subscription student limit. Please upgrade your plan to add more students."
+            : "Your school has reached its subscription student limit. Please contact your school administrator to upgrade the subscription plan."}
         </p>
 
         {/* Usage Info */}
@@ -77,9 +77,9 @@ export function StudentLimitModal({ isOpen, onClose, currentCount, limit, planNa
 
         {/* Actions */}
         <div className="mt-6 space-y-3">
-          {isOwner ? (
+          {isAdmin ? (
             <button
-              onClick={() => { onClose(); navigate("/owner/subscription"); }}
+              onClick={() => { onClose(); navigate("/admin/subscription"); }}
               className="w-full py-3 px-4 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition"
             >
               Upgrade Plan
@@ -87,7 +87,7 @@ export function StudentLimitModal({ isOpen, onClose, currentCount, limit, planNa
           ) : (
             <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-center">
               <p className="text-xs font-semibold text-amber-800">
-                Contact your School Owner to increase student quota.
+                Contact your School Administrator to increase student quota.
               </p>
             </div>
           )}

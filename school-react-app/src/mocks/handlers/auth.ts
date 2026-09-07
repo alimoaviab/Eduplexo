@@ -23,7 +23,6 @@ const ROLE_ALIASES: Record<string, Role> = {
   admin: "admin",
   teacher: "teacher",
   student: "student",
-  owner: "owner",
   super_admin: "super_admin",
 };
 

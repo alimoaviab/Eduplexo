@@ -35,40 +35,6 @@ export function CampusRequirementGuard({
     );
   }
 
-  // 1. School Check: ONLY the owner can and must create schools.
-  // Admins, teachers, and school staff already belong to an owner's provisioned school.
-  // They must NEVER be blocked by the owner onboarding screen.
-  const isOwner = user?.role === "owner";
-  if (isOwner && !hasSchools) {
-    return (
-      <div className="rounded-3xl border border-rose-200 bg-rose-50/50 p-8 shadow-sm text-center max-w-2xl mx-auto my-6">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-100 text-rose-700 mb-4 shadow-sm">
-          <AppIcon name="Building" size={28} />
-        </div>
-        <h3 className="text-lg font-bold text-rose-950 tracking-tight">
-          School Required Before Creating {entityName.toUpperCase()}
-        </h3>
-        <p className="mt-2 text-xs font-medium text-rose-800/90 leading-relaxed max-w-md mx-auto">
-          Jab tak owner koi school add na kare, tab tak koi bhi data (class, session, teacher, student) create nahi kiya ja sakta. Pehle apni school add karein.
-        </p>
-        <div className="mt-6 flex items-center justify-center gap-3">
-          <Button
-            variant="secondary"
-            onClick={() => navigate(-1)}
-          >
-            Go Back
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => navigate("/owner/schools")}
-          >
-            Create School
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   const effectiveCampusId = selectedCampusId || activeCampusId;
 
   return (

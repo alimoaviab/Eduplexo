@@ -15,9 +15,9 @@ export function SubscriptionRequired({ current }: SubscriptionRequiredProps) {
   const phase = current?.phase ?? sub?.status;
   const isSuspended = phase === "suspended";
   const isExpired = isSuspended || phase === "expired" || phase === "grace" || phase === "trial_expired" || sub?.status === "cancelled";
-  const isOwner = user?.role === "owner";
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
-  const title = isOwner
+  const title = isAdmin
     ? isSuspended
       ? "Account Suspended"
       : isExpired
@@ -27,15 +27,15 @@ export function SubscriptionRequired({ current }: SubscriptionRequiredProps) {
       ? "Subscription Expired"
       : "Subscription Inactive";
 
-  const description = isOwner
+  const description = isAdmin
     ? isSuspended
-      ? "Your subscription is suspended. Renew your plan to restore access for your campuses."
+      ? "Your school subscription is suspended. Renew your plan to restore access."
       : isExpired
-      ? "Your institution subscription has ended. Please renew or upgrade your plan to restore full access across all your campuses."
-      : "You have not activated your Free Trial or Subscription. Please choose a plan to continue managing your institution."
+      ? "Your school subscription has ended. Please renew or upgrade your plan to restore full access."
+      : "You have not activated your Free Trial or Subscription. Please choose a plan to continue managing your school."
     : isSuspended
-      ? "This school's subscription is currently inactive. Please contact your school Owner to renew the EduPlexo subscription."
-      : "Your school's subscription plan is currently inactive or has expired. Please contact your School Owner to renew or activate the plan.";
+      ? "This school's subscription is currently inactive. Please contact your school administrator to renew the EduPlexo subscription."
+      : "Your school's subscription plan is currently inactive or has expired. Please contact your school administrator to renew or activate the plan.";
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center min-h-[70vh] bg-slate-50/50 p-6 md:p-12 animate-fade-in-up">
@@ -58,22 +58,15 @@ export function SubscriptionRequired({ current }: SubscriptionRequiredProps) {
           {description}
         </p>
 
-        {isOwner ? (
+        {isAdmin ? (
           <div className="space-y-3">
             <button
-              onClick={() => navigate("/owner/subscription")}
+              onClick={() => navigate("/admin/subscription")}
               className="w-full h-11 md:h-12 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs md:text-sm tracking-wide shadow-lg shadow-blue-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <AppIcon name="Zap" size={16} />
               <span>{isSuspended ? "Renew Plan" : "Choose Subscription Plan"}</span>
               <AppIcon name="ChevronRight" size={16} />
-            </button>
-            <button
-              onClick={() => navigate("/owner/schools")}
-              className="w-full h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <AppIcon name="Building" size={14} />
-              <span>Manage / Onboard Campuses</span>
             </button>
           </div>
         ) : (
@@ -81,7 +74,7 @@ export function SubscriptionRequired({ current }: SubscriptionRequiredProps) {
             <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
               <p className="text-xs font-semibold text-slate-600 leading-normal flex items-center gap-2 justify-center">
                 <AppIcon name="Lock" size={14} className="text-slate-400 shrink-0" />
-                <span>Please contact your <strong>School Owner</strong> to renew or activate the subscription.</span>
+                <span>Please contact your <strong>School Administrator</strong> to renew or activate the subscription.</span>
               </p>
             </div>
             <button
@@ -89,7 +82,7 @@ export function SubscriptionRequired({ current }: SubscriptionRequiredProps) {
               className="w-full h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <AppIcon name="Headphones" size={14} />
-              <span>Contact Owner / Support</span>
+              <span>Contact Support</span>
             </button>
           </div>
         )}
