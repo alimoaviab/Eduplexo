@@ -391,10 +391,10 @@ func (h *Handler) ListClassFees(w http.ResponseWriter, r *http.Request) {
 		for _, c := range h.Store.Classes {
 			if c.ID == classID {
 				classFound = true
-				// The class must belong to the caller's tenant (owners and
-				// super admins may view globally). Without this check a
-				// cross-tenant caller learns another school's class name.
-				if c.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "owner" || ctx.Role == "super_admin" {
+				// The class must belong to the caller's tenant (super admins
+				// may view globally). Without this check a cross-tenant
+				// caller learns another school's class name.
+				if c.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "super_admin" {
 					className = c.Name
 				}
 				break

@@ -6,7 +6,7 @@ import (
 )
 
 func IsPrivileged(ctx *api.RequestContext) bool {
-	return ctx != nil && (ctx.Role == "admin" || ctx.Role == "super_admin" || ctx.Role == "owner")
+	return ctx != nil && (ctx.Role == "admin" || ctx.Role == "super_admin")
 }
 
 func TeacherProfileLocked(s *store.MemStore, ctx *api.RequestContext) *store.Teacher {

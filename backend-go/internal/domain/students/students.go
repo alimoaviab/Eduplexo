@@ -320,7 +320,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		h.Store.RLock()
 		defer h.Store.RUnlock()
 		for _, s := range h.Store.Students {
-			if s.ID == targetID && (s.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "owner" || ctx.Role == "super_admin") {
+			if s.ID == targetID && (s.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "super_admin") {
 				if !access.CanAccessStudentLocked(h.Store, ctx, s.ID) {
 					return nil, api.NewControlledError("FORBIDDEN", "You can only access assigned student records.", 403, nil)
 				}
@@ -731,7 +731,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 		var target *store.Student
 		for _, s := range h.Store.Students {
-			if s.ID == id && (s.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "owner" || ctx.Role == "super_admin") {
+			if s.ID == id && (s.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "super_admin") {
 				target = s
 				break
 			}
@@ -818,7 +818,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		h.Store.Lock()
 		defer h.Store.Unlock()
 		for i, s := range h.Store.Students {
-			if s.ID == id && (s.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "owner" || ctx.Role == "super_admin") {
+			if s.ID == id && (s.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "super_admin") {
 				before := *s
 				h.Store.Students = append(h.Store.Students[:i], h.Store.Students[i+1:]...)
 				h.Persist("students:delete", before.ID)

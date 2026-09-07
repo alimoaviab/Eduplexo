@@ -1142,7 +1142,7 @@ func (h *Handler) SuspendSchool(w http.ResponseWriter, r *http.Request) {
 
 			targetSchoolID := s.SchoolID
 			for _, u := range h.Store.Users {
-				if u.SchoolID == targetSchoolID && u.Role != "owner" {
+				if u.SchoolID == targetSchoolID {
 					u.Status = "suspended"
 					h.Persist("users", u)
 				}

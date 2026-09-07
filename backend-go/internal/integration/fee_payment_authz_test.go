@@ -66,7 +66,7 @@ func TestPaymentUpload_RejectsUnauthorizedRoles(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 
 	// Restricted roles -> 403 before body processing.
-	for _, role := range []string{"student", "teacher", "parent"} {
+	for _, role := range []string{"student", "teacher", "parent", "owner"} {
 		ctx := &api.RequestContext{SchoolID: "sch_1", UserID: "u_" + role, Role: role}
 		req := httptest.NewRequest(http.MethodPost, "/api/payment/upload", bytes.NewBufferString(`{}`))
 		req = req.WithContext(api.WithContext(req.Context(), ctx))
@@ -77,7 +77,7 @@ func TestPaymentUpload_RejectsUnauthorizedRoles(t *testing.T) {
 
 	// Authorized roles pass the gate (they fail later on invalid input or
 	// missing DB — the point is they are NOT rejected as FORBIDDEN).
-	for _, role := range []string{"owner", "admin", "super_admin"} {
+	for _, role := range []string{"admin", "super_admin"} {
 		ctx := &api.RequestContext{SchoolID: "sch_1", UserID: "u_" + role, Role: role, Permissions: permissionsForRole(role)}
 		req := httptest.NewRequest(http.MethodPost, "/api/payment/upload", bytes.NewBufferString(`{}`))
 		req = req.WithContext(api.WithContext(req.Context(), ctx))

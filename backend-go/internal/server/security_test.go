@@ -91,55 +91,17 @@ func addUser(t *testing.T, s *store.MemStore, id, schoolID, email, role, pw stri
 
 // Owner is NOT an Admin: every operational Admin API must return 403 for the
 // Owner role, while the Owner's own ERP endpoints keep working.
-func TestOwnerCannotAccessAdminAPIs(t *testing.T) {
+// Legacy owner accounts cannot log in, and legacy owner endpoints are retired.
+func TestOwnerCannotLoginOrAccessAPIs(t *testing.T) {
 	s, h := newSecurityRouter(t)
 	addUser(t, s, "owner_a", "system", "owner.a@test.school", "owner", "Owner@1234")
 
-	token, code := loginToken(t, h, "owner.a@test.school", "Owner@1234")
-	require.Equal(t, http.StatusOK, code, "owner login should succeed")
+	_, code := loginToken(t, h, "owner.a@test.school", "Owner@1234")
+	require.Equal(t, http.StatusUnauthorized, code, "owner login must be rejected with 401")
 
-	// Owner ERP works.
-	rec := request(t, h, http.MethodGet, "/api/owner/schools", token, "")
-	assert.Equal(t, http.StatusOK, rec.Code, "owner should list own schools")
-
-	// Every operational Admin endpoint is denied.
-	for _, path := range []string{
-		"/api/students",
-		"/api/teachers",
-		"/api/classes",
-		"/api/subjects",
-		"/api/attendance",
-		"/api/exams",
-		"/api/results",
-		"/api/homework",
-		"/api/fees",
-		"/api/timetable",
-		"/api/announcements",
-		"/api/certificates",
-		"/api/expenses",
-	} {
-		rec := request(t, h, http.MethodGet, path, token, "")
-		assert.Equalf(t, http.StatusForbidden, rec.Code, "owner GET %s must be 403", path)
-	}
-
-	// Owner write attempts are denied too.
-	for _, path := range []string{
-		"/api/students",
-		"/api/teachers",
-		"/api/classes",
-		"/api/attendance",
-		"/api/exams",
-		"/api/fees/generate",
-		"/api/certificates/generate",
-	} {
-		rec := request(t, h, http.MethodPost, path, token, `{}`)
-		assert.Equalf(t, http.StatusForbidden, rec.Code, "owner POST %s must be 403", path)
-	}
-
-	// And the admin dashboard aggregate is off-limits (owner scope is the
-	// sentinel "system", so even a non-gated handler cannot see tenant data).
-	rec = request(t, h, http.MethodGet, "/api/dashboard/composite", token, "")
-	assert.NotEqual(t, http.StatusOK, rec.Code)
+	// Legacy owner routes are completely gone (404)
+	rec := request(t, h, http.MethodGet, "/api/owner/schools", "", "")
+	assert.Equal(t, http.StatusNotFound, rec.Code, "legacy owner route must return 404")
 }
 
 // Admin keeps full operational access after the Owner slimming.
@@ -151,53 +113,51 @@ func TestAdminKeepsOperationalAccess(t *testing.T) {
 	rec := request(t, h, http.MethodGet, "/api/students", token, "")
 	assert.Equal(t, http.StatusOK, rec.Code, "admin should list students")
 
-	// Admin must NOT enter the Owner ERP.
+	// Owner routes are retired.
 	rec = request(t, h, http.MethodGet, "/api/owner/schools", token, "")
-	assert.Equal(t, http.StatusForbidden, rec.Code, "admin must be denied owner endpoints")
+	assert.Equal(t, http.StatusNotFound, rec.Code, "owner routes must be 404")
 }
 
-// Owner A must never see Owner B's school — even with a direct ID request.
-func TestOwnerSchoolIsolation(t *testing.T) {
+// School Admin A must never see School Admin B's data.
+func TestSchoolAdminIsolation(t *testing.T) {
 	s, h := newSecurityRouter(t)
-	addUser(t, s, "owner_a", "system", "owner.a2@test.school", "owner", "Owner@1234")
-	addUser(t, s, "owner_b", "system", "owner.b2@test.school", "owner", "Owner@1234")
+	now := time.Now()
 
-	tokenA, _ := loginToken(t, h, "owner.a2@test.school", "Owner@1234")
-	tokenB, _ := loginToken(t, h, "owner.b2@test.school", "Owner@1234")
-	require.NotEmpty(t, tokenA)
-	require.NotEmpty(t, tokenB)
+	s.Lock()
+	s.Schools = append(s.Schools,
+		&store.School{ID: "sch_a", SchoolID: "school_a", Name: "School A", Status: "active", CreatedAt: now, UpdatedAt: now},
+		&store.School{ID: "sch_b", SchoolID: "school_b", Name: "School B", Status: "active", CreatedAt: now, UpdatedAt: now},
+	)
+	s.Students = append(s.Students,
+		&store.Student{ID: "stu_a1", SchoolID: "school_a", FirstName: "Student", LastName: "A", AdmissionNo: "ADM-A1", ClassID: "cls_1", Section: "A", Status: "active", CreatedAt: now, UpdatedAt: now},
+		&store.Student{ID: "stu_b1", SchoolID: "school_b", FirstName: "Student", LastName: "B", AdmissionNo: "ADM-B1", ClassID: "cls_1", Section: "A", Status: "active", CreatedAt: now, UpdatedAt: now},
+	)
+	s.Unlock()
 
-	// Owner A creates a school.
-	rec := request(t, h, http.MethodPost, "/api/owner/schools", tokenA,
-		`{"name":"Alpha Academy","code":"ALPHA","city":"Lahore","address":"1 Main St","email":"admin@alpha.test","password":"Admin@1234"}`)
-	require.Equal(t, http.StatusCreated, rec.Code, "owner A should create a school")
-	var created struct {
-		Data struct {
-			SchoolID string `json:"school_id"`
-			ID       string `json:"_id"`
+	addUser(t, s, "admin_a", "school_a", "admin.a@test.school", "admin", "Admin@1234")
+	addUser(t, s, "admin_b", "school_b", "admin.b@test.school", "admin", "Admin@1234")
+
+	tokenA, codeA := loginToken(t, h, "admin.a@test.school", "Admin@1234")
+	require.Equal(t, http.StatusOK, codeA)
+	tokenB, codeB := loginToken(t, h, "admin.b@test.school", "Admin@1234")
+	require.Equal(t, http.StatusOK, codeB)
+
+	// Admin A only sees School A's students
+	recA := request(t, h, http.MethodGet, "/api/students", tokenA, "")
+	assert.Equal(t, http.StatusOK, recA.Code)
+	var listA struct {
+		Data []struct {
+			ID string `json:"id"`
 		} `json:"data"`
 	}
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &created))
-	schoolID := created.Data.SchoolID
-	require.NotEmpty(t, schoolID)
-
-	// Owner A sees exactly one school.
-	rec = request(t, h, http.MethodGet, "/api/owner/schools", tokenA, "")
-	assert.Equal(t, http.StatusOK, rec.Code)
-	var list struct {
-		Data []map[string]any `json:"data"`
+	require.NoError(t, json.Unmarshal(recA.Body.Bytes(), &listA))
+	for _, st := range listA.Data {
+		assert.NotEqual(t, "stu_b1", st.ID, "admin A must not see school B student")
 	}
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &list))
-	require.Len(t, list.Data, 1)
 
-	// Owner B must NOT see A's school in the list...
-	rec = request(t, h, http.MethodGet, "/api/owner/schools", tokenB, "")
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &list))
-	assert.Empty(t, list.Data, "owner B must not see owner A's school")
-
-	// ...and a direct tampered-ID request must be denied (404, not 200).
-	rec = request(t, h, http.MethodDelete, "/api/owner/schools/"+schoolID, tokenB, "")
-	assert.Equal(t, http.StatusNotFound, rec.Code, "owner B deleting owner A's school must 404")
+	// Admin B direct request for stu_a1 must fail (403 or 404)
+	recB := request(t, h, http.MethodGet, "/api/students/stu_a1", tokenB, "")
+	assert.True(t, recB.Code == http.StatusForbidden || recB.Code == http.StatusNotFound, "admin B must not access school A student")
 }
 
 // Legacy parent accounts can no longer sign in.

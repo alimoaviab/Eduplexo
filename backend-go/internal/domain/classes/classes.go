@@ -272,7 +272,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		h.Store.RLock()
 		defer h.Store.RUnlock()
 		for _, c := range h.Store.Classes {
-			if c.ID == id && (c.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "owner" || ctx.Role == "super_admin") {
+			if c.ID == id && (c.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "super_admin") {
 				if !access.CanAccessClassLocked(h.Store, ctx, c.ID) {
 					return nil, api.NewControlledError("FORBIDDEN", "You can only access assigned classes.", 403, nil)
 				}
@@ -320,7 +320,7 @@ func (h *Handler) GetSubjects(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, c := range h.Store.Classes {
-			if c.ID == id && (c.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "owner" || ctx.Role == "super_admin") {
+			if c.ID == id && (c.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "super_admin") {
 				if !access.CanAccessClassLocked(h.Store, ctx, c.ID) {
 					return nil, api.NewControlledError("FORBIDDEN", "You can only access assigned classes.", 403, nil)
 				}
@@ -472,7 +472,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		h.Store.Lock()
 		defer h.Store.Unlock()
 		for _, c := range h.Store.Classes {
-			if c.ID == id && (c.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "owner" || ctx.Role == "super_admin") {
+			if c.ID == id && (c.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "super_admin") {
 				if ctx.Role == "teacher" && !access.CanAccessClassLocked(h.Store, ctx, c.ID) {
 					return nil, api.NewControlledError("FORBIDDEN", "You can only update assigned classes.", 403, nil)
 				}
@@ -545,7 +545,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		h.Store.Lock()
 		defer h.Store.Unlock()
 		for i, c := range h.Store.Classes {
-			if c.ID == id && (c.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "owner" || ctx.Role == "super_admin") {
+			if c.ID == id && (c.SchoolID == ctx.SchoolID || ctx.SchoolID == "" || ctx.Role == "super_admin") {
 				before := *c
 				h.Store.Classes = append(h.Store.Classes[:i], h.Store.Classes[i+1:]...)
 				h.Persist("classes:delete", before.ID)

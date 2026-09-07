@@ -116,7 +116,7 @@ func (h *Handler) Context(w http.ResponseWriter, r *http.Request) {
 			if s == nil || s.SchoolID == "__global__" {
 				continue
 			}
-			if ctx.Role != "owner" && ctx.Role != "super_admin" && s.SchoolID != ctx.SchoolID {
+			if ctx.Role != "super_admin" && s.SchoolID != ctx.SchoolID {
 				continue
 			}
 			schools = append(schools, map[string]string{"id": s.SchoolID, "name": s.Name, "code": s.Code})
@@ -125,7 +125,7 @@ func (h *Handler) Context(w http.ResponseWriter, r *http.Request) {
 			if c == nil {
 				continue
 			}
-			if ctx.Role != "owner" && ctx.Role != "super_admin" && c.SchoolID != ctx.SchoolID {
+			if ctx.Role != "super_admin" && c.SchoolID != ctx.SchoolID {
 				continue
 			}
 			campuses = append(campuses, map[string]string{"id": c.ID, "school_id": c.SchoolID, "name": c.Name})
@@ -244,7 +244,7 @@ func (h *Handler) Schools(w http.ResponseWriter, r *http.Request) {
 			if s == nil || s.SchoolID == "__global__" {
 				continue
 			}
-			if ctx.Role != "owner" && ctx.Role != "super_admin" && s.SchoolID != ctx.SchoolID {
+			if ctx.Role != "super_admin" && s.SchoolID != ctx.SchoolID {
 				continue
 			}
 			rows = append(rows, schoolSummary(s, h.ownerNameLocked(s.OwnerUserID)))
@@ -264,14 +264,14 @@ func (h *Handler) CampusesBySchool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !canUseExtension(ctx.Role) {
-		api.WriteResult(w, api.Fail("FORBIDDEN", "This extension is available for owners, admins, and teachers.", 403, nil))
+		api.WriteResult(w, api.Fail("FORBIDDEN", "This extension is available for admins and teachers.", 403, nil))
 		return
 	}
 	schoolID := chi.URLParam(r, "schoolID")
 	if schoolID == "" {
 		schoolID = ctx.SchoolID
 	}
-	if ctx.Role != "owner" && ctx.Role != "super_admin" && schoolID != ctx.SchoolID {
+	if ctx.Role != "super_admin" && schoolID != ctx.SchoolID {
 		api.WriteResult(w, api.Fail("TENANT_MISMATCH", "Cross-school campus access is not allowed.", 403, nil))
 		return
 	}
@@ -301,7 +301,7 @@ func (h *Handler) Hierarchy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !canUseExtension(ctx.Role) {
-		api.WriteResult(w, api.Fail("FORBIDDEN", "This extension is available for owners, admins, and teachers.", 403, nil))
+		api.WriteResult(w, api.Fail("FORBIDDEN", "This extension is available for admins and teachers.", 403, nil))
 		return
 	}
 
@@ -309,7 +309,7 @@ func (h *Handler) Hierarchy(w http.ResponseWriter, r *http.Request) {
 	schoolID := firstNonEmpty(q.Get("school_id"), ctx.SchoolID)
 	campusID := firstNonEmpty(q.Get("campus_id"), ctx.CampusID)
 	teacherID := q.Get("teacher_id")
-	if ctx.Role != "owner" && ctx.Role != "super_admin" && schoolID != ctx.SchoolID {
+	if ctx.Role != "super_admin" && schoolID != ctx.SchoolID {
 		api.WriteResult(w, api.Fail("TENANT_MISMATCH", "Cross-school hierarchy access is not allowed.", 403, nil))
 		return
 	}
@@ -670,8 +670,8 @@ func (h *Handler) Revert(w http.ResponseWriter, r *http.Request) {
 		api.WriteResult(w, api.Fail("UNAUTHORIZED", "Authentication is required.", 401, nil))
 		return
 	}
-	if ctx.Role != "owner" && ctx.Role != "admin" && ctx.Role != "super_admin" {
-		api.WriteResult(w, api.Fail("FORBIDDEN", "Only owner/admin can revert generated batches.", 403, nil))
+	if ctx.Role != "admin" && ctx.Role != "super_admin" {
+		api.WriteResult(w, api.Fail("FORBIDDEN", "Only admin can revert generated batches.", 403, nil))
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -703,7 +703,7 @@ func (h *Handler) Revert(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) buildPlan(ctx *api.RequestContext, in generateRequest, inserting bool) (*generatedPlan, error) {
 	if !canUseExtension(ctx.Role) {
-		return nil, api.NewControlledError("FORBIDDEN", "This extension is available for owners, admins, and teachers.", 403, nil)
+		return nil, api.NewControlledError("FORBIDDEN", "This extension is available for admins and teachers.", 403, nil)
 	}
 	normalise(&in)
 	now := time.Now()
@@ -711,7 +711,7 @@ func (h *Handler) buildPlan(ctx *api.RequestContext, in generateRequest, inserti
 
 	school := h.resolveSchool(ctx, in)
 	if school == nil {
-		if ctx.Role != "owner" && ctx.Role != "super_admin" {
+		if ctx.Role != "super_admin" {
 			return nil, api.NewControlledError("SCHOOL_REQUIRED", "Admin and teacher batches must use the active school.", 422, nil)
 		}
 		school = &store.School{
@@ -1068,14 +1068,14 @@ func (h *Handler) resolveSchool(ctx *api.RequestContext, in generateRequest) *st
 			continue
 		}
 		if in.SchoolID != "" && s.SchoolID == in.SchoolID {
-			if ctx.Role == "owner" || ctx.Role == "super_admin" || s.SchoolID == ctx.SchoolID {
+			if ctx.Role == "super_admin" || s.SchoolID == ctx.SchoolID {
 				return s
 			}
 		}
 		if in.SchoolID == "" && ctx.SchoolID != "" && s.SchoolID == ctx.SchoolID {
 			return s
 		}
-		if in.SchoolName != "" && strings.EqualFold(s.Name, in.SchoolName) && (ctx.Role == "owner" || ctx.Role == "super_admin") {
+		if in.SchoolName != "" && strings.EqualFold(s.Name, in.SchoolName) && (ctx.Role == "super_admin") {
 			return s
 		}
 	}
@@ -1119,7 +1119,7 @@ func (h *Handler) resolveAcademicYear(schoolID string, in generateRequest) *stor
 }
 
 func (h *Handler) canSeeBatch(ctx *api.RequestContext, b *store.DummyDataBatch) bool {
-	if ctx.Role == "owner" || ctx.Role == "super_admin" {
+	if ctx.Role == "super_admin" {
 		return true
 	}
 	if ctx.Role == "teacher" {
@@ -1280,7 +1280,7 @@ func studentSummary(s *store.Student) map[string]any {
 }
 
 func canUseExtension(role string) bool {
-	return role == "owner" || role == "super_admin" || role == "admin" || role == "teacher"
+	return role == "super_admin" || role == "admin" || role == "teacher"
 }
 
 func normalise(in *generateRequest) {

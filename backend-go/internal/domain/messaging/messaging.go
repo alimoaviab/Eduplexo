@@ -660,7 +660,7 @@ func (h *Handler) CleanupExpired() int {
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
 func isConversationAllowed(role1, role2 string) bool {
-	if role1 == "super_admin" || role2 == "super_admin" || role1 == "admin" || role2 == "admin" || role1 == "owner" || role2 == "owner" {
+	if role1 == "super_admin" || role2 == "super_admin" || role1 == "admin" || role2 == "admin" {
 		return true
 	}
 

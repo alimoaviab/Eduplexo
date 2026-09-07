@@ -59,7 +59,7 @@ func requireExamStaff(ctx *api.RequestContext) bool {
 		return false
 	}
 	switch ctx.Role {
-	case "admin", "owner", "super_admin", "teacher":
+	case "admin", "super_admin", "teacher":
 		return true
 	}
 	return false
