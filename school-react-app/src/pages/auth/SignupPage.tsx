@@ -34,6 +34,7 @@ export function SignupPage() {
   const [acceptTerms, setAcceptTerms] = useState(false);
 
   const [formData, setFormData] = useState({
+    schoolName: "",
     fullName: "",
     email: "",
     phone: "",
@@ -98,9 +99,7 @@ export function SignupPage() {
         }
       } else {
         // As long as there is time remaining, clear any stale expiration error
-        setError((prev) =>
-          prev === "This verification code has expired. Please request a new code." ? "" : prev
-        );
+        setError((prev) => (prev === "This verification code has expired. Please request a new code." ? "" : prev));
       }
     }, 1000);
 
@@ -114,7 +113,8 @@ export function SignupPage() {
   }
 
   function validate(): string | null {
-    if (!formData.fullName.trim()) return "Owner name is required";
+    if (!formData.schoolName.trim()) return "School / institution name is required";
+    if (!formData.fullName.trim()) return "Administrator name is required";
     if (!formData.phone.trim()) return "Phone number is required";
     if (!formData.email.trim()) return "Email is required";
     if (!EMAIL_REGEX.test(formData.email)) return "Please enter a valid email address";
