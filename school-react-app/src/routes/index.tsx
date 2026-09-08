@@ -23,6 +23,7 @@ import {
 import { AuthLayout } from "@/pages/auth/AuthLayout";
 import { LoginPage } from "@/pages/auth/LoginPage";
 import { SignupPage } from "@/pages/auth/SignupPage";
+import { ReferralSignupPage } from "@/pages/auth/ReferralSignupPage";
 
 // ─── Chunk Error Boundary ────────────────────────────────────────────────
 // Catches chunk load failures at the router level and auto-reloads.
@@ -141,6 +142,15 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="/auth/login" replace /> },
           { path: "login", element: <LoginPage /> },
           { path: "signup", element: <SignupPage /> },
+        ],
+      },
+      
+      // ─── Referral ────────────────────────────────────────────────────────
+      {
+        path: "/invite/:token",
+        element: <AuthLayout />,
+        children: [
+          { index: true, element: <ReferralSignupPage /> },
         ],
       },
 

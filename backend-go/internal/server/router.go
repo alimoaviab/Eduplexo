@@ -137,6 +137,7 @@ func Router(cfg config.Config, s *store.MemStore, pg *persistence.Persister, rdb
 		r.Post("/auth/login", authRL.Limit(authH.Login))
 		r.Post("/auth/logout", authH.Logout)
 		r.Post("/auth/signup", authRL.Limit(authH.Signup))
+		r.Post("/auth/signup/referral", authRL.Limit(authH.ReferralSignup))
 		r.Post("/auth/verify-otp", authRL.Limit(authH.VerifyOTP))
 		r.Post("/auth/resend-otp", authRL.Limit(authH.ResendOTP))
 		r.Post("/auth/change-email", authRL.Limit(authH.ChangeEmail))
@@ -150,6 +151,13 @@ func Router(cfg config.Config, s *store.MemStore, pg *persistence.Persister, rdb
 		// ─── Public SEO Engine (landing page tool, rate-limited) ─────────
 		seoH := seo.New(cfg.AnthropicAPIKey, rdb)
 		r.Post("/seo/generate", seoH.Generate)
+
+		// ─── Referral (Public Validation) ────────────────────────────────
+		var referralH *api.ReferralHandler
+		if pg != nil {
+			referralH = api.NewReferralHandler(pg.RuntimePool())
+			r.Get("/referral/validate/{token}", referralH.ValidateToken)
+		}
 
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Authenticator(cfg, s, revoker))
@@ -182,6 +190,13 @@ func Router(cfg config.Config, s *store.MemStore, pg *persistence.Persister, rdb
 			r.Get("/eduplexo-extension/history/export.csv", edxH.ExportCSV)
 			r.Get("/eduplexo-extension/history/{id}", edxH.Detail)
 			r.Post("/eduplexo-extension/history/{id}/revert", edxH.Revert)
+
+			if pg != nil && referralH != nil {
+				r.Get("/referral/publishers", referralH.ListPublishers)
+				r.Post("/referral/publishers", referralH.CreatePublisher)
+				r.Get("/referral/publishers/{id}/tokens", referralH.ListTokensForPublisher)
+				r.Post("/referral/generate", referralH.GenerateToken)
+			}
 
 			// School campuses listing (scoped to caller's school context)
 			r.Get("/campuses", func(w http.ResponseWriter, r *http.Request) {

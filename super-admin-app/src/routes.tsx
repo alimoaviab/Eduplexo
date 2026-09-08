@@ -29,6 +29,8 @@ export const router = createBrowserRouter([
       { path: '/payments', element: lazyPage(() => import('./pages/PaymentsPage'), 'PaymentsPage') },
       { path: '/packages', element: lazyPage(() => import('./pages/PackagesPage'), 'PackagesPage') },			{ path: '/subscriptions', element: lazyPage(() => import('./pages/SubscriptionsPage'), 'SubscriptionsPage') },
 			{ path: '/custom-plans', element: lazyPage(() => import('./pages/CustomPlansPage'), 'CustomPlansPage') },
+      { path: '/publishers', element: lazyPage(() => import('./pages/PublishersPage'), 'PublishersPage') },
+      { path: '/publishers/:id', element: lazyPage(() => import('./pages/PublisherDetailPage'), 'PublisherDetailPage') },
       { path: '/ai-usage', element: lazyPage(() => import('./pages/AIUsagePage'), 'AIUsagePage') },
       { path: '/settings', element: lazyPage(() => import('./pages/SettingsPage'), 'SettingsPage') },
       { path: '/moderation', element: <Navigate to="/dashboard" replace /> },
