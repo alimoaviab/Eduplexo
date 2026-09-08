@@ -211,7 +211,7 @@ SELECT
     'sch_' || sc.campus_id,
     sc.new_school_id,
     sc.campus_name,
-    COALESCE(NULLIF(sc.campus_code, ''), UPPER(SUBSTRING(sc.campus_name FROM 1 FOR 4))),
+    COALESCE(NULLIF(sc.campus_code, ''), UPPER(SUBSTRING(sc.campus_name FROM 1 FOR 4)) || '_' || SUBSTRING(sc.campus_id FROM 5 FOR 4)),
     sc.campus_address,
     sc.campus_phone,
     sc.campus_email,
