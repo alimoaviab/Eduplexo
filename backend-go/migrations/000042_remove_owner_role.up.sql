@@ -300,8 +300,7 @@ JOIN _secondary_campuses sc ON st.campus_id = sc.campus_id
 WHERE fa.student_id = st.id AND fa.school_id = sc.parent_school_id;
 
 UPDATE student_fee_discounts sfd
-SET school_id = st.school_id,
-    updated_at = NOW()
+SET school_id = st.school_id
 FROM students st
 JOIN _secondary_campuses sc ON st.campus_id = sc.campus_id
 WHERE sfd.student_id = st.id AND sfd.school_id = sc.parent_school_id;
