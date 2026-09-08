@@ -1,8 +1,6 @@
 import { useState, useEffect, type ChangeEvent, type FormEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppIcon } from "shared/ui/AppIcon";
-import { apiRequest } from "@/lib/api";
-import { useAuth } from "@/hooks/useAuth";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s]).{8,}$/;
@@ -19,7 +17,6 @@ interface ReferralOffer {
 export function ReferralSignupPage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const { verifySession } = useAuth();
 
   const [loadingOffer, setLoadingOffer] = useState(true);
   const [offerError, setOfferError] = useState("");
@@ -39,11 +36,16 @@ export function ReferralSignupPage() {
   useEffect(() => {
     const fetchOffer = async () => {
       setLoadingOffer(true);
-      const res = await apiRequest(`/api/referral/validate/${token}`);
-      if (res.ok && res.data) {
-        setOffer(res.data);
-      } else {
-        setOfferError(res.message || "This referral link is invalid or has expired.");
+      try {
+        const res = await fetch(`/api/referral/validate/${token}`);
+        const data = await res.json();
+        if (res.ok && data.data) {
+          setOffer(data.data);
+        } else {
+          setOfferError(data.message || "This referral link is invalid or has expired.");
+        }
+      } catch (err) {
+        setOfferError("Failed to validate referral link.");
       }
       setLoadingOffer(false);
     };
@@ -98,9 +100,23 @@ export function ReferralSignupPage() {
 
     const data = await response.json();
     if (response.ok && data.ok) {
-      // Direct signup bypasses OTP for referrals
-      await verifySession();
-      navigate("/");
+      if (data.data?.token) {
+        // Clear prior session tokens
+        localStorage.removeItem("active_school_id");
+        localStorage.removeItem("active_branch_id");
+        localStorage.removeItem("academic_year_id");
+        localStorage.removeItem("last_school_id");
+        localStorage.removeItem("profile_id");
+        localStorage.removeItem("class_id");
+        localStorage.removeItem("student_id");
+
+        localStorage.setItem("token", data.data.token);
+        if (data.data?.school_id) {
+          localStorage.setItem("active_school_id", data.data.school_id);
+        }
+        window.dispatchEvent(new Event("auth-changed"));
+      }
+      setTimeout(() => navigate("/"), 500);
     } else {
       setError(data.message || "Signup failed. Please try again.");
       setLoading(false);
