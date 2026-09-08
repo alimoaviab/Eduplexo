@@ -204,8 +204,8 @@ WHERE c.campus_rank > 1;
 
 -- 1. Insert newly promoted schools
 INSERT INTO schools (
-    id, school_id, name, code, address, city, phone, email, status,
-    campus_type, created_at, updated_at
+    id, school_id, name, code, address, contact_phone, contact_email, status,
+    created_at, updated_at
 )
 SELECT
     'sch_' || sc.campus_id,
@@ -213,11 +213,9 @@ SELECT
     sc.campus_name,
     COALESCE(NULLIF(sc.campus_code, ''), UPPER(SUBSTRING(sc.campus_name FROM 1 FOR 4))),
     sc.campus_address,
-    sc.campus_city,
     sc.campus_phone,
     sc.campus_email,
     sc.campus_status,
-    'main',
     sc.campus_created_at,
     NOW()
 FROM _secondary_campuses sc
