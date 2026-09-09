@@ -31,7 +31,9 @@ export async function apiRequest<T = any>(
   options: RequestInit = {}
 ): Promise<{ ok: boolean; data?: T; message?: string; error?: any }> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('sa_token') : null
-  const authHeaders: Record<string, string> = {}
+  const authHeaders: Record<string, string> = {
+    'X-App': 'super-admin',
+  }
   if (token) {
     authHeaders['Authorization'] = `Bearer ${token}`
   }

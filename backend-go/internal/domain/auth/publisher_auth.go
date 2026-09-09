@@ -93,7 +93,7 @@ func (h *Handler) PublisherLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.setSessionCookie(w, token, true)
+	h.setNamedSessionCookie(w, "publisher_session", token, true)
 
 	api.WriteJSON(w, http.StatusOK, map[string]any{
 		"ok":      true,

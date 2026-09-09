@@ -31,7 +31,9 @@ export async function apiRequest<T = any>(
 
   // Attach publisher bearer token automatically if present
   const token = typeof window !== 'undefined' ? localStorage.getItem('eduplexo_publisher_token') : null
-  const authHeaders: Record<string, string> = {}
+  const authHeaders: Record<string, string> = {
+    'X-App': 'publisher',
+  }
   if (token) {
     authHeaders['Authorization'] = `Bearer ${token}`
   }

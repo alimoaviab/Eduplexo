@@ -189,9 +189,35 @@ func readToken(r *http.Request) (string, bool) {
 			return token, false
 		}
 	}
+
+	path := ""
+	if r.URL != nil {
+		path = r.URL.Path
+	}
+	xApp := r.Header.Get("X-App")
+
+	// Role/portal specific cookie check based on route prefix or X-App header
+	if strings.HasPrefix(path, "/api/super-admin") || xApp == "super-admin" {
+		if c, err := r.Cookie("sa_session"); err == nil && c.Value != "" {
+			return strings.TrimSpace(c.Value), false
+		}
+	} else if strings.HasPrefix(path, "/api/publisher") || xApp == "publisher" {
+		if c, err := r.Cookie("publisher_session"); err == nil && c.Value != "" {
+			return strings.TrimSpace(c.Value), false
+		}
+	}
+
+	// Standard cookie checks
 	if c, err := r.Cookie("session"); err == nil && c.Value != "" {
 		return strings.TrimSpace(c.Value), false
 	}
+	if c, err := r.Cookie("sa_session"); err == nil && c.Value != "" {
+		return strings.TrimSpace(c.Value), false
+	}
+	if c, err := r.Cookie("publisher_session"); err == nil && c.Value != "" {
+		return strings.TrimSpace(c.Value), false
+	}
+
 	if r.URL != nil && r.URL.Path == "/ws" {
 		if t := strings.TrimSpace(r.URL.Query().Get("token")); t != "" {
 			return t, true

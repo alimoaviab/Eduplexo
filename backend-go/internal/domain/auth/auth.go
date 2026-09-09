@@ -353,7 +353,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		h.Persist("users", user)
 	}
 
-	h.setSessionCookie(w, token, body.RememberMe)
+	if user.Role == "super_admin" {
+		h.setNamedSessionCookie(w, "sa_session", token, body.RememberMe)
+	} else {
+		h.setNamedSessionCookie(w, "session", token, body.RememberMe)
+	}
 
 	// Resolve profile_id for role-specific portals.
 	// Teachers need their teacher._id, students need student._id + class_id.
@@ -1264,8 +1268,35 @@ func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 		rawToken = strings.TrimSpace(authz[7:])
 	}
 	if rawToken == "" {
-		if cookie, err := r.Cookie("session"); err == nil && strings.TrimSpace(cookie.Value) != "" {
-			rawToken = strings.TrimSpace(cookie.Value)
+		referer := r.Header.Get("Referer")
+		xApp := r.Header.Get("X-App")
+		isSA := strings.Contains(referer, ":3001") || strings.Contains(referer, "/super-admin") || xApp == "super-admin"
+		isPub := strings.Contains(referer, ":3003") || strings.Contains(referer, "/publisher") || xApp == "publisher"
+
+		if isSA {
+			if cookie, err := r.Cookie("sa_session"); err == nil && strings.TrimSpace(cookie.Value) != "" {
+				rawToken = strings.TrimSpace(cookie.Value)
+			}
+		} else if isPub {
+			if cookie, err := r.Cookie("publisher_session"); err == nil && strings.TrimSpace(cookie.Value) != "" {
+				rawToken = strings.TrimSpace(cookie.Value)
+			}
+		}
+
+		if rawToken == "" {
+			if cookie, err := r.Cookie("session"); err == nil && strings.TrimSpace(cookie.Value) != "" {
+				rawToken = strings.TrimSpace(cookie.Value)
+			}
+		}
+		if rawToken == "" {
+			if cookie, err := r.Cookie("sa_session"); err == nil && strings.TrimSpace(cookie.Value) != "" {
+				rawToken = strings.TrimSpace(cookie.Value)
+			}
+		}
+		if rawToken == "" {
+			if cookie, err := r.Cookie("publisher_session"); err == nil && strings.TrimSpace(cookie.Value) != "" {
+				rawToken = strings.TrimSpace(cookie.Value)
+			}
 		}
 	}
 	if rawToken == "" {
@@ -1558,9 +1589,10 @@ func (h *Handler) tokenTTLForRequest(r *http.Request) time.Duration {
 }
 
 func (h *Handler) setSessionCookie(w http.ResponseWriter, token string, rememberMe bool) {
-	// Cross-site cookie support: when CookieSecure is true (production with HTTPS),
-	// use SameSite=None so the cookie is sent on cross-origin requests from the
-	// frontend (e.g. Vercel) to the backend on a different domain.
+	h.setNamedSessionCookie(w, "session", token, rememberMe)
+}
+
+func (h *Handler) setNamedSessionCookie(w http.ResponseWriter, cookieName string, token string, rememberMe bool) {
 	sameSite := http.SameSiteLaxMode
 	if h.Cfg.CookieSecure {
 		sameSite = http.SameSiteNoneMode
@@ -1575,7 +1607,7 @@ func (h *Handler) setSessionCookie(w http.ResponseWriter, token string, remember
 	w.Header().Set("Cache-Control", "no-store")
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     "session",
+		Name:     cookieName,
 		Value:    token,
 		HttpOnly: true,
 		Secure:   h.Cfg.CookieSecure,
@@ -1599,12 +1631,18 @@ const (
 )
 
 func (h *Handler) clearSessionCookie(w http.ResponseWriter) {
+	h.clearNamedSessionCookie(w, "session")
+	h.clearNamedSessionCookie(w, "sa_session")
+	h.clearNamedSessionCookie(w, "publisher_session")
+}
+
+func (h *Handler) clearNamedSessionCookie(w http.ResponseWriter, cookieName string) {
 	sameSite := http.SameSiteLaxMode
 	if h.Cfg.CookieSecure {
 		sameSite = http.SameSiteNoneMode
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name:     "session",
+		Name:     cookieName,
 		Value:    "",
 		HttpOnly: true,
 		Secure:   h.Cfg.CookieSecure,
@@ -1629,6 +1667,11 @@ func (h *Handler) isSuperAdminRequest(r *http.Request) bool {
 	token := ""
 	if authz := r.Header.Get("Authorization"); authz != "" && strings.HasPrefix(strings.ToLower(authz), "bearer ") {
 		token = strings.TrimSpace(authz[7:])
+	}
+	if token == "" {
+		if c, err := r.Cookie("sa_session"); err == nil && c.Value != "" {
+			token = strings.TrimSpace(c.Value)
+		}
 	}
 	if token == "" {
 		if c, err := r.Cookie("session"); err == nil && c.Value != "" {
