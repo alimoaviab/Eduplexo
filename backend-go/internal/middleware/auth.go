@@ -78,7 +78,10 @@ func Authenticator(cfg config.Config, s *store.MemStore, revoker session.Revoker
 			blocked := false
 			actualRole := ""
 
-			if u := s.LookupUser(ctx.UserID, ctx.ActorEmail); u != nil && u.ID == ctx.UserID {
+			if ctx.Role == "publisher" {
+				matchedByID = true
+				actualRole = "publisher"
+			} else if u := s.LookupUser(ctx.UserID, ctx.ActorEmail); u != nil && u.ID == ctx.UserID {
 				matchedByID = true
 				actualRole = u.Role
 				if u.Status == "suspended" || u.Status == "locked" {
@@ -116,7 +119,7 @@ func Authenticator(cfg config.Config, s *store.MemStore, revoker session.Revoker
 			isSuspended := blocked
 
 			// If the account is active, check if their school is suspended.
-			if !isSuspended && ctx.SchoolID != "system" {
+			if !isSuspended && ctx.SchoolID != "system" && ctx.SchoolID != "" && ctx.Role != "publisher" {
 				if sch := s.LookupSchool(ctx.SchoolID); sch != nil {
 					if sch.Status == "suspended" || sch.Status == "expired" {
 						isSuspended = true
