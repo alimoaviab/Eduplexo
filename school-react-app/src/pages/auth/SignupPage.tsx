@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, type ChangeEvent, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { AppIcon } from "shared/ui/AppIcon";
 import { OtpInput } from "../../components/auth/OtpInput";
@@ -15,6 +15,7 @@ import { OtpInput } from "../../components/auth/OtpInput";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s]).{8,}$/;
 const STORAGE_KEY = "eduplexo_pending_signup_session";
+const REFERRAL_STORAGE_KEY = "eduplexo_referral_token";
 
 interface PendingSession {
   pendingId: string;
@@ -25,6 +26,24 @@ interface PendingSession {
 
 export function SignupPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Referral tracking state
+  const [referralToken, setReferralToken] = useState<string>("");
+
+  useEffect(() => {
+    const ref = searchParams.get("ref") || searchParams.get("referral_token");
+    if (ref) {
+      const clean = ref.trim();
+      sessionStorage.setItem(REFERRAL_STORAGE_KEY, clean);
+      setReferralToken(clean);
+    } else {
+      const stored = sessionStorage.getItem(REFERRAL_STORAGE_KEY);
+      if (stored) {
+        setReferralToken(stored.trim());
+      }
+    }
+  }, [searchParams]);
 
   // Form state
   const [stage, setStage] = useState<"form" | "verify">("form");
@@ -148,7 +167,8 @@ export function SignupPage() {
           phone: formData.phone.trim(),
           email: formData.email.trim(),
           password: formData.password,
-          role: "admin"
+          role: "admin",
+          referral_token: referralToken || sessionStorage.getItem(REFERRAL_STORAGE_KEY) || undefined,
         }),
       });
 
@@ -162,6 +182,7 @@ export function SignupPage() {
       // ─── Super Admin Bypass: Direct Login when Skip OTP is active ───
       if (data?.token) {
         sessionStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(REFERRAL_STORAGE_KEY);
         setSuccessMessage("Account created successfully! Redirecting to your dashboard...");
 
         localStorage.removeItem("active_school_id");
@@ -244,6 +265,7 @@ export function SignupPage() {
 
       // Success! Clear session storage and store auth token
       sessionStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(REFERRAL_STORAGE_KEY);
       setSuccessMessage("Email verified successfully! Redirecting to your dashboard...");
 
       if (result?.data?.token) {
@@ -409,6 +431,12 @@ export function SignupPage() {
 
             {stage === "form" ? (
               <>
+                {referralToken && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold mb-3 shadow-sm">
+                    <AppIcon name="CheckCircle" size={13} className="text-emerald-600" />
+                    <span>Partner Referral Applied: <strong className="font-mono">{referralToken}</strong></span>
+                  </div>
+                )}
                 <h2 className="text-3xl font-black text-gray-900 mb-1 tracking-tight">Create School Account</h2>
                 <p className="text-gray-500 font-medium text-xs">Enter your school and administrator details below</p>
               </>

@@ -7,6 +7,7 @@ import { ToastHost } from '@/utils/toast'
 const navItems = [
 	{ label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard' },
 	{ label: 'Owners & Schools', href: '/schools', icon: 'Building2' },
+	{ label: 'Publishers', href: '/publishers', icon: 'Link2' },
 	{ label: 'Payments', href: '/payments', icon: 'CreditCard' },
 	{ label: 'Subscriptions', href: '/subscriptions', icon: 'Award' },
 	{ label: 'Custom Plans', href: '/custom-plans', icon: 'FileText' },

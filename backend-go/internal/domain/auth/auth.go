@@ -17,6 +17,7 @@ import (
 	"github.com/eduplexo/backend-go/internal/api"
 	authpkg "github.com/eduplexo/backend-go/internal/auth"
 	"github.com/eduplexo/backend-go/internal/config"
+	"github.com/eduplexo/backend-go/internal/domain/referral"
 	"github.com/eduplexo/backend-go/internal/domain/subscription"
 	"github.com/eduplexo/backend-go/internal/domain/superadmin"
 	"github.com/eduplexo/backend-go/internal/email"
