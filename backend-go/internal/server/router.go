@@ -588,6 +588,15 @@ func Router(cfg config.Config, s *store.MemStore, pg *persistence.Persister, rdb
 			r.Get("/super-admin/users", saH.ListUsers)
 			r.Get("/super-admin/activity", saH.RecentActivity)
 
+			// Publishers Management (Super Admin only)
+			r.Get("/super-admin/publishers", saH.ListPublishers)
+			r.Post("/super-admin/publishers", saH.CreatePublisher)
+			r.Get("/super-admin/publishers/{id}", saH.GetPublisher)
+			r.Patch("/super-admin/publishers/{id}", saH.UpdatePublisher)
+			r.Post("/super-admin/publishers/{id}/suspend", saH.SuspendPublisher)
+			r.Post("/super-admin/publishers/{id}/reactivate", saH.ReactivatePublisher)
+			r.Delete("/super-admin/publishers/{id}", saH.DeletePublisher)
+
 			// Packages Management (Super Admin only)
 			pkgH := packages.NewWithPersist(s, saveFn)
 			r.Post("/super-admin/packages", pkgH.Create)
