@@ -32,6 +32,21 @@ func (h *ReferralHandler) ValidateToken(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Check if this is a publisher referral token (e.g. PUB_...)
+	pub, err := referral.GetPublisherByToken(r.Context(), h.Pool, rawToken)
+	if err == nil {
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"ok": true,
+			"data": map[string]any{
+				"valid":          true,
+				"publisher_id":   pub.ID,
+				"publisher_name": pub.Name,
+				"referral_token": pub.ReferralToken,
+			},
+		})
+		return
+	}
+
 	tok, err := referral.ValidateToken(r.Context(), h.Pool, rawToken)
 	if err != nil {
 		if err == referral.ErrTokenInvalid || err == referral.ErrTokenExpired {
@@ -49,6 +64,7 @@ func (h *ReferralHandler) ValidateToken(w http.ResponseWriter, r *http.Request) 
 	WriteJSON(w, http.StatusOK, map[string]any{
 		"ok": true,
 		"data": map[string]any{
+			"valid":                  true,
 			"plan_id":                tok.PlanID,
 			"plan_name_snapshot":     tok.PlanNameSnapshot,
 			"monthly_price_snapshot": tok.MonthlyPriceSnapshot,
