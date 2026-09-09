@@ -116,31 +116,31 @@ export default function App() {
     }
 
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50/70 p-4 font-sans">
-        <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200/80 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50/80 p-4 font-sans">
+        <div className="bg-white p-8 sm:p-10 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200/80 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
           <div className="flex justify-center mb-5">
-            <div className="h-16 w-16 rounded-2xl overflow-hidden shadow-md ring-1 ring-slate-200 bg-white flex items-center justify-center">
+            <div className="h-16 w-16 rounded-2xl overflow-hidden shadow-sm border border-slate-200 bg-white flex items-center justify-center">
               <img
                 src="/logo.jpeg"
                 alt="Eduplexo"
                 className="h-full w-full object-cover"
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = '/favicon.png';
+                  (e.currentTarget as HTMLImageElement).src = '/favicon.png'
                 }}
               />
             </div>
           </div>
-          
+
           <div className="text-center mb-6">
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">Partner Portal</h1>
-            <p className="text-slate-500 text-xs mt-1">
+            <p className="text-slate-500 text-xs mt-1.5">
               Sign in with your partner credentials to track school referrals.
             </p>
           </div>
 
           {loginError && (
-            <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs font-medium flex items-start gap-2">
-              <span className="font-bold">•</span>
+            <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium flex items-start gap-2">
+              <span className="font-bold shrink-0">•</span>
               <span>{loginError}</span>
             </div>
           )}
@@ -154,7 +154,7 @@ export default function App() {
                 type="email"
                 required
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="partner@example.com"
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm transition-all"
               />
@@ -169,7 +169,7 @@ export default function App() {
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   className="w-full pl-4 pr-11 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm font-mono transition-all"
                 />
@@ -206,10 +206,10 @@ export default function App() {
     `https://app.eduplexo.com/auth/register?ref=${dashboard.referral_token}`
 
   return (
-    <div className="min-h-screen bg-slate-50/50 font-sans text-slate-900 pb-16">
-      {/* Top Navbar */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-slate-50/60 font-sans text-slate-900 pb-20">
+      {/* ─── 7. Refined Header ────────────────────────────────────────────── */}
+      <header className="bg-white border-b border-slate-200/90 sticky top-0 z-30 shadow-xs">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl overflow-hidden shadow-xs border border-slate-200/80 bg-white flex items-center justify-center shrink-0">
               <img
@@ -217,176 +217,226 @@ export default function App() {
                 alt="Eduplexo"
                 className="h-full w-full object-cover"
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = '/favicon.png';
+                  (e.currentTarget as HTMLImageElement).src = '/favicon.png'
                 }}
               />
             </div>
-            <div>
+            <div className="flex items-center gap-2">
               <span className="font-extrabold text-sm sm:text-base tracking-tight text-slate-900">
-                Eduplexo Partner Portal
+                Eduplexo
               </span>
-              <span className="hidden sm:inline-block ml-2 px-2 py-0.5 text-[10px] font-bold bg-blue-50 text-blue-700 rounded-md border border-blue-100">
-                Referral Tracking
+              <span className="px-2 py-0.5 text-[11px] font-bold bg-blue-50 text-blue-700 rounded-md border border-blue-100">
+                Partner Portal
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="hidden sm:block text-right">
-              <div className="text-xs font-bold text-slate-800">{dashboard.publisher_name}</div>
-              <div className="text-[11px] font-mono text-slate-400">Token: {dashboard.referral_token}</div>
+            <div className="hidden sm:flex items-center gap-2 text-right">
+              <div className="h-8 w-8 rounded-full bg-blue-50 text-blue-700 font-bold text-xs flex items-center justify-center border border-blue-100">
+                {dashboard.publisher_name ? dashboard.publisher_name.charAt(0).toUpperCase() : 'P'}
+              </div>
+              <div className="text-left">
+                <div className="text-xs font-bold text-slate-800 leading-tight">
+                  {dashboard.publisher_name}
+                </div>
+                <div className="text-[10px] font-mono text-slate-400">
+                  {dashboard.referral_token}
+                </div>
+              </div>
             </div>
+
             <button
               onClick={handleLogout}
-              className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200"
+              className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 flex items-center gap-1.5"
             >
-              Sign out
+              <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <span>Sign out</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-8 mt-8">
-        {/* Welcome & Referral Link Hero Card */}
-        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-900/10 mb-8 border border-slate-800">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-semibold mb-3 border border-blue-400/20">
-                <span>Active Partner Link</span>
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
-                Welcome back, {dashboard.publisher_name}
-              </h2>
-              <p className="text-slate-300 text-xs sm:text-sm mt-1 max-w-xl">
-                Share your unique referral link with school administrators. Any school created through this link is instantly and permanently attributed to your partner account.
-              </p>
+      {/* ─── Main Content Container ───────────────────────────────────────── */}
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+        {/* ─── 2. Referral Hero Card (Dark Navy, SaaS Polished) ────────────── */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl shadow-slate-950/10 text-white relative overflow-hidden">
+          {/* Subtle background glow */}
+          <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+
+          <div className="relative z-10">
+            {/* 3. Hierarchy 1: Small status indicator */}
+            <div className="flex items-center gap-2 mb-3">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-xs font-medium border border-emerald-500/20">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Active Partner Link
+              </span>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="bg-white/10 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 text-center">
-                <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Your Referral Code</div>
-                <div className="text-xl font-mono font-black text-amber-300 mt-0.5">{dashboard.referral_token}</div>
-              </div>
-            </div>
-          </div>
+            {/* 3. Hierarchy 2 & 8: Welcome message with dynamic Publisher name */}
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+              Welcome back, {dashboard.publisher_name}
+            </h1>
 
-          {/* Referral Link Box */}
-          <div className="mt-6 pt-6 border-t border-white/10">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-              Your Shareable Referral URL
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="flex-1 bg-black/40 border border-white/15 rounded-2xl px-4 py-2.5 flex items-center overflow-hidden">
-                <input
-                  type="text"
-                  readOnly
-                  value={referralLink}
-                  className="w-full bg-transparent text-xs sm:text-sm font-mono text-emerald-300 focus:outline-none select-all"
-                />
+            {/* 3. Hierarchy 3 & 8: Short supporting message */}
+            <p className="text-slate-300 text-xs sm:text-sm mt-1.5 max-w-2xl leading-relaxed">
+              Share your referral link with school administrators. Schools created through your link are automatically attributed to your account.
+            </p>
+
+            {/* 3. Hierarchy 4: Referral code - connected and secondary */}
+            <div className="mt-6 pt-5 border-t border-slate-800/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Your Referral Link
+              </span>
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Referral Code:
+                </span>
+                <span className="font-mono font-bold text-slate-200 bg-slate-800/90 px-2 py-0.5 rounded border border-slate-700/60 text-[11px]">
+                  {dashboard.referral_token}
+                </span>
               </div>
+            </div>
+
+            {/* 4 & 5. Hierarchy 5 & 6: Referral URL Area with Single Primary Copy Action */}
+            <div className="mt-2.5 flex flex-col sm:flex-row items-stretch gap-2 bg-slate-950/90 p-1.5 rounded-xl border border-slate-800/90 focus-within:border-blue-500/50 transition-colors">
+              <div className="flex-1 flex items-center min-w-0 px-3 py-2">
+                <svg className="w-4 h-4 text-slate-400 shrink-0 mr-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                <span className="font-mono text-xs sm:text-sm text-slate-200 truncate select-all">
+                  {referralLink}
+                </span>
+              </div>
+
+              {/* Single Clear Primary CTA */}
               <button
+                type="button"
                 onClick={() => copyReferralLink(referralLink)}
-                className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-2xl transition-all shadow-md flex items-center justify-center gap-2"
+                className={`px-5 py-2.5 font-bold text-xs sm:text-sm rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shrink-0 select-none shadow-sm ${
+                  copied
+                    ? 'bg-emerald-600 text-white shadow-emerald-950/20'
+                    : 'bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white shadow-blue-950/30'
+                }`}
               >
-                {copied ? '✓ Copied to Clipboard!' : 'Copy Referral Link'}
+                {copied ? (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <span>Copy Referral Link</span>
+                  </>
+                )}
               </button>
-              <a
-                href={referralLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium text-xs sm:text-sm rounded-2xl transition-colors text-center"
-              >
-                Test Link ↗
-              </a>
             </div>
           </div>
         </div>
 
-        {/* Big Metric Card */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-              Total Schools Created
+        {/* ─── 9 & 10. Refined Stat Cards ──────────────────────────────────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+          {/* Primary Metric: Total Referred Schools */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+              Total Referred Schools
             </div>
-            <div className="text-4xl sm:text-5xl font-black text-blue-600 tracking-tight">
+            <div className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
               {dashboard.total_referred_schools}
             </div>
-            <p className="text-xs text-slate-500 mt-2 font-medium">
-              Live count of schools successfully registered via your referral code.
+            <p className="text-xs text-slate-500 mt-2 font-normal">
+              Live count of schools successfully registered via your referral link.
             </p>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          {/* Secondary Metric: Referral Status */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
             <div>
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-                Attribution Status
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                Referral Status
               </div>
               <div className="flex items-center gap-2 mt-1">
-                <span className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-xl font-black text-slate-800">Active & Tracking</span>
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-base sm:text-lg font-bold text-slate-800">
+                  Active & Tracking
+                </span>
               </div>
-              <p className="text-xs text-slate-500 mt-2 font-medium">
-                Referral attribution is processed automatically upon school signup.
+              <p className="text-xs text-slate-500 mt-2 font-normal">
+                Attribution is linked automatically when an institution signs up.
               </p>
             </div>
-            <div className="text-[11px] text-slate-400 pt-3 border-t border-slate-100 font-mono">
+            <div className="text-[11px] text-slate-400 pt-3 mt-3 border-t border-slate-100 font-mono">
               Partner ID: {dashboard.publisher_id}
             </div>
           </div>
         </div>
 
-        {/* Referred Schools Audit Table */}
-        <div className="mb-4 flex items-center justify-between">
+        {/* ─── 11 & 12. Referred Schools Section & Table ───────────────────── */}
+        <div className="mt-8 mb-4 flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Referred Schools</h3>
-            <p className="text-xs text-slate-500">List of schools attributed to your referral link.</p>
+            <h2 className="text-lg font-bold text-slate-900">Referred Schools</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Schools successfully attributed to your referral link.
+            </p>
           </div>
-          <span className="text-xs font-bold bg-white text-slate-700 px-3 py-1 rounded-full border border-slate-200 shadow-xs">
-            {dashboard.schools?.length || 0} Registered
+          <span className="text-xs font-semibold bg-white text-slate-700 px-3 py-1 rounded-full border border-slate-200/80 shadow-xs">
+            {dashboard.schools?.length || 0} {dashboard.schools?.length === 1 ? 'School' : 'Schools'}
           </span>
         </div>
 
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
           {!dashboard.schools || dashboard.schools.length === 0 ? (
-            <div className="p-16 text-center">
-              <div className="w-14 h-14 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-slate-100 text-xl font-bold">
-                🏫
+            <div className="py-14 px-4 text-center">
+              <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-xl flex items-center justify-center mx-auto mb-3">
+                <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
               </div>
-              <h4 className="font-bold text-slate-800 text-base mb-1">No Schools Registered Yet</h4>
+              <h3 className="font-bold text-slate-800 text-sm mb-1">No Schools Registered Yet</h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto mb-4">
                 When schools use your referral link to sign up, they will appear here automatically with their registration details.
               </p>
               <button
+                type="button"
                 onClick={() => copyReferralLink(referralLink)}
-                className="px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5"
+                className="px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1.5"
               >
-                {copied ? '✓ Link Copied!' : 'Copy Your Referral Link'}
+                {copied ? '✓ Link Copied' : 'Copy Referral Link'}
               </button>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-slate-50/80 text-slate-500 text-[11px] uppercase tracking-wider font-bold border-b border-slate-200">
+                <thead className="bg-slate-50/80 text-slate-500 text-[11px] uppercase tracking-wider font-bold border-b border-slate-200/80">
                   <tr>
-                    <th className="px-6 py-4">School Name</th>
-                    <th className="px-6 py-4">School Code</th>
-                    <th className="px-6 py-4">Registration Date</th>
-                    <th className="px-6 py-4 text-right">Status</th>
+                    <th className="px-6 py-3.5">School Name</th>
+                    <th className="px-6 py-3.5">School Code</th>
+                    <th className="px-6 py-3.5">Registration Date</th>
+                    <th className="px-6 py-3.5 text-right">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {dashboard.schools.map(school => (
+                  {dashboard.schools.map((school) => (
                     <tr key={school.id || school.school_id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="px-6 py-4">
                         <div className="font-bold text-slate-900">{school.name}</div>
+                        {school.contact_email && (
+                          <div className="text-xs text-slate-400 mt-0.5">{school.contact_email}</div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
-                        <code className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-mono font-bold">
+                        <code className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-mono font-semibold border border-slate-200/60">
                           {school.code || '—'}
                         </code>
                       </td>
-                      <td className="px-6 py-4 text-xs text-slate-500">
+                      <td className="px-6 py-4 text-xs text-slate-500 font-medium">
                         {new Date(school.created_at).toLocaleDateString(undefined, {
                           year: 'numeric',
                           month: 'short',
@@ -395,13 +445,19 @@ export default function App() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
                             school.status === 'active'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
+                              : 'bg-amber-50 text-amber-700 border-amber-200/80'
                           }`}
                         >
-                          {(school.status || 'ACTIVE').toUpperCase()}
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              school.status === 'active' ? 'bg-emerald-500' : 'bg-amber-500'
+                            }`}
+                          />
+                          {(school.status || 'active').charAt(0).toUpperCase() +
+                            (school.status || 'active').slice(1)}
                         </span>
                       </td>
                     </tr>
