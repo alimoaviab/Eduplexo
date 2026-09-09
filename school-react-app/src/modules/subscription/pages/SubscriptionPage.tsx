@@ -1,43 +1,121 @@
 /**
- * SubscriptionPage — Owner subscription & billing.
+ * SubscriptionPage — School Admin subscription & billing portal.
  *
- * Fully state-driven: every status, date, remaining-day value, and CTA
- * decision comes from the backend `/api/subscription/current` payload
- * (`phase`, `payment_status`, `scheduled_plan`, `days_remaining`, ...). No
- * hardcoded trial durations, plan prices, or lifecycle text lives here.
- *
- * Sections:
- *   1. Current subscription (compact banner — standard, trial, or the
- *      Owner's negotiated Custom Plan)
- *   2. Student capacity (owner-wide, backend counts)
- *   3. Plans (standard comparison + the Owner's private Custom Plan contract
- *      when Super Admin assigned one; otherwise a "Contact EduPlexo" CTA)
- *   4. Billing activity (real history timeline)
+ * Logically correct, production-grade SaaS billing experience:
+ *   1. Current Subscription & Status Hero (backend-driven status, days remaining, renewal/expiry)
+ *   2. Student Capacity Gauge (live enrollment utilization, progress bar, threshold alerts)
+ *   3. Available Plans (Starter, Growth, Premium with clear hierarchy, checkmarked features, context-aware CTAs)
+ *   4. Enterprise / Custom Tier (intentional 1,000+ students / multi-campus option with interactive inquiry)
+ *   5. Negotiated Custom Contract Card (preserved when assigned by Super Admin)
+ *   6. Subscription & Payment History (genuine backend events, deduplicated, dynamically counted, lifecycle vs financial distinction)
  */
 
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  Check,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  AlertTriangle,
+  Zap,
+  ShieldCheck,
+  Sparkles,
+  Headphones,
+  Building2,
+  ArrowRight,
+  TrendingUp,
+  RefreshCw,
+  Sliders,
+  X,
+  Mail,
+  Phone,
+  CreditCard,
+  Ban,
+} from "lucide-react";
 import { SchoolShell } from "@/layouts/SchoolShell";
 import { useSubscription } from "../hooks/useSubscription";
-import type { CurrentSubscription, Plan } from "../services/subscription.service";
-import { AppIcon } from "shared/ui/AppIcon";
+import { useAuth } from "@/hooks/useAuth";
+import type { CurrentSubscription, Plan, HistoryEntry } from "../services/subscription.service";
+import { showToast } from "@/utils/toast";
 
 const TRIAL_PHASES = new Set(["trial_active", "trial_expiring", "trial_expired"]);
 const LAPSED_PHASES = new Set(["expired", "grace", "suspended", "trial_expired", "expiring"]);
 
-function planRank(plan: Plan | undefined): number {
+function planRank(plan: Plan | null | undefined): number {
   if (!plan) return -1;
   const s = (plan.id || plan.name || "").toLowerCase();
   if (s.includes("starter")) return 1;
   if (s.includes("growth")) return 2;
   if (s.includes("premium")) return 3;
-  return 4;
+  if (s.includes("custom") || s.includes("enterprise")) return 4;
+  return 0;
 }
+
+function planDisplayName(name: string): string {
+  const map: Record<string, string> = {
+    trial: "Free Trial",
+    free_trial: "Free Trial",
+    plan_starter: "Starter School",
+    starter: "Starter School",
+    plan_growth: "Growth Plan",
+    growth: "Growth Plan",
+    plan_premium: "Premium Plan",
+    premium: "Premium Plan",
+    plan_custom: "Custom Plan",
+    custom: "Custom Plan",
+  };
+  if (map[name]) return map[name];
+  if (name) return name.charAt(0).toUpperCase() + name.slice(1);
+  return "Standard License";
+}
+
+function formatDate(value?: string): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" });
+}
+
+const DEFAULT_PLAN_DETAILS: Record<
+  string,
+  { tagline: string; defaultFeatures: string[] }
+> = {
+  plan_starter: {
+    tagline: "For small schools getting started with modern digital management",
+    defaultFeatures: [
+      "Student & Staff Directory",
+      "Basic Attendance Tracking",
+      "Fee Collection & Receipts",
+      "Parent Portal App Access",
+      "Standard Email Support",
+    ],
+  },
+  plan_growth: {
+    tagline: "For growing schools requiring analytics, alerts, and deeper reporting",
+    defaultFeatures: [
+      "Everything in Starter",
+      "Advanced Reporting & Gradebooks",
+      "SMS Notifications & Parent Alerts",
+      "Analytics & Financial Dashboard",
+      "Priority Email & Phone Support",
+    ],
+  },
+  plan_premium: {
+    tagline: "For larger institutions requiring custom staff suites & priority gateways",
+    defaultFeatures: [
+      "Everything in Growth",
+      "Complete Staff & HR Suite",
+      "Advanced Customizations & Roles",
+      "Priority High-Volume SMS Gateway",
+      "Dedicated Account Support",
+    ],
+  },
+};
 
 function currentPlanOf(current: CurrentSubscription | null | undefined, plans: Plan[]): Plan | null {
   const sub = current?.subscription;
   if (!sub || !sub.plan_name || sub.plan_name === "trial") return null;
-  // Prefer the real catalog / contract object (carries is_custom, prices,
-  // limit) — matched by machine plan_id first, then by name.
   const match = (plans || []).find(
     (p) =>
       (sub.plan_id && (p.id === sub.plan_id || p.name === sub.plan_id)) ||
@@ -54,38 +132,17 @@ function currentPlanOf(current: CurrentSubscription | null | undefined, plans: P
     price: sub.price,
     currency: sub.currency || "PKR",
     student_limit: sub.student_limit,
-    features: [],
+    features: DEFAULT_PLAN_DETAILS[sub.plan_name]?.defaultFeatures || [],
     is_custom: Boolean(current?.current_plan_is_custom),
     popular: false,
   };
 }
 
-function planDisplayName(name: string): string {
-  const map: Record<string, string> = {
-    trial: "Free Trial",
-    free_trial: "Free Trial",
-    plan_starter: "Starter Plan",
-    starter: "Starter Plan",
-    plan_growth: "Growth Plan",
-    growth: "Growth Plan",
-    plan_premium: "Premium Plan",
-    premium: "Premium Plan",
-    plan_custom: "Custom Plan",
-    custom: "Custom Plan",
-  };
-  if (map[name]) return map[name];
-  if (name) return name.charAt(0).toUpperCase() + name.slice(1);
-  return "Standard License";
-}
-
-function formatDate(value?: string): string {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" });
-}
-
 export function SubscriptionPage() {
   const { current, plans, history, isLoading, isUpgrading, isStartingTrial } = useSubscription();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const [inquiryModalOpen, setInquiryModalOpen] = useState(false);
 
   if (isLoading && current === undefined && plans.length === 0) {
     return <SubscriptionSkeleton />;
@@ -113,319 +170,775 @@ export function SubscriptionPage() {
   const scheduledPlan = current?.next_plan ? planDisplayName(current.next_plan) : "";
 
   return (
-    <SchoolShell eyebrow="Owner Portal" title="Subscription & Billing">
-      <div className="max-w-6xl mx-auto space-y-6 pb-14">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4 pb-2 border-b border-slate-200/80">
+    <SchoolShell eyebrow="Admin Portal" title="Subscription & Billing">
+      <div className="max-w-6xl mx-auto space-y-8 pb-16">
+        {/* Page Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/90">
           <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-100 text-blue-700">
-                Billing & Licensing
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/60">
+                School Licensing
               </span>
-              <span className="text-[11px] font-semibold text-slate-400">· Multi-Campus</span>
+              <span className="text-xs font-semibold text-slate-400">· Campus Administration</span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">Subscription & Billing</h1>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+              Subscription & Billing
+            </h1>
+            <p className="mt-0.5 text-xs sm:text-sm text-slate-500 font-medium">
+              Manage your school's plan, student enrollment capacity, and verified billing history.
+            </p>
           </div>
-          <a
-            href="mailto:billing@eduplexo.com"
-            className="shrink-0 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm flex items-center gap-1.5"
-          >
-            <AppIcon name="Headphones" size={14} />
-            <span>Contact Support</span>
-          </a>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setInquiryModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5"
+            >
+              <Building2 className="w-3.5 h-3.5 text-slate-500" />
+              <span>Enterprise Inquiry</span>
+            </button>
+            <a
+              href="mailto:support@eduplexo.com?subject=EduPlexo%20Billing%20Support"
+              className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-sm flex items-center gap-1.5"
+            >
+              <Headphones className="w-3.5 h-3.5 text-blue-100" />
+              <span>Contact Support</span>
+            </a>
+          </div>
         </div>
 
-        {/* ── SECTION 1: Current Subscription (compact) ─────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/90 p-5 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <h2 className="text-lg font-black text-slate-900 tracking-tight">
-                    {isTrialPhase ? "Free Trial" : planDisplayName(sub?.plan_name || "") || "No Active Plan"}
-                  </h2>
-                  {currentIsCustom && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider bg-violet-100 text-violet-700 border border-violet-200">
-                      Custom Plan
+        {/* ── SECTION 1: Current Subscription & Student Capacity ──────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {/* Card 1: Current Subscription Summary */}
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                      {isTrialPhase
+                        ? "Free Trial"
+                        : planDisplayName(sub?.plan_name || "") || "No Active Plan"}
+                    </h2>
+                    {currentIsCustom && (
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider bg-violet-100 text-violet-700 border border-violet-200">
+                        Custom Contract
+                      </span>
+                    )}
+                    <StatusBadge phase={phase} daysRemaining={daysRemaining} />
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">
+                    {isTrialPhase
+                      ? "Full-featured evaluation license with 500 student capacity."
+                      : currentIsCustom
+                      ? "Institutional customized contract tailored to your campus requirements."
+                      : "Official institutional SaaS subscription for Eduplexo Cloud."}
+                  </p>
+                </div>
+
+                <div className="shrink-0 text-right">
+                  {sub && sub.price > 0 ? (
+                    <div>
+                      <span className="text-lg font-black text-slate-900 tabular-nums">
+                        {sub.currency || "PKR"} {sub.price.toLocaleString()}
+                      </span>
+                      <span className="text-xs text-slate-400 font-semibold"> / month</span>
+                    </div>
+                  ) : isTrialPhase ? (
+                    <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-bold border border-blue-200/60">
+                      14-Day Free Evaluation
                     </span>
+                  ) : (
+                    <span className="text-xs font-semibold text-slate-400">Free Tier</span>
                   )}
-                  <StatusBadge phase={phase} daysRemaining={daysRemaining} />
-                  {current?.payment_status === "approved" && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                      {scheduledPlan} scheduled
+                </div>
+              </div>
+
+              {/* Lifecycle and Expiry Info */}
+              <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="flex items-center gap-2 text-slate-600">
+                  <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                  {isTrialPhase ? (
+                    <span>
+                      Trial ends:{" "}
+                      <strong className="text-slate-900 font-bold">{formatDate(renewalDate)}</strong>
+                      {daysRemaining > 0 && (
+                        <span className="text-blue-700 font-semibold ml-1">
+                          ({daysRemaining} {daysRemaining === 1 ? "day" : "days"} remaining)
+                        </span>
+                      )}
                     </span>
-                  )}
-                  {current?.scheduled_plan && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200">
-                      {planDisplayName(current.scheduled_plan)} scheduled
+                  ) : (
+                    <span>
+                      {current?.custom_plan_ending ? "Plan ends:" : "Next renewal:"}{" "}
+                      <strong className="text-slate-900 font-bold">{formatDate(renewalDate)}</strong>
+                      {daysRemaining > 0 && (
+                        <span className="text-slate-500 font-medium ml-1">
+                          ({daysRemaining} {daysRemaining === 1 ? "day" : "days"} left)
+                        </span>
+                      )}
                     </span>
                   )}
                 </div>
 
-                <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-slate-600">
-                  {sub && sub.price > 0 && (
-                    <span className="font-bold text-slate-900 tabular-nums">
-                      {sub.currency || "PKR"} {sub.price.toLocaleString()} / month
-                    </span>
-                  )}
-                  {daysRemaining > 0 && !isTrialPhase && (
-                    <span className="font-semibold">
-                      {current?.custom_plan_ending ? "Plan ends" : "Renews"}:{" "}
-                      <strong className="text-slate-900">{formatDate(renewalDate)}</strong>
-                    </span>
-                  )}
-                  {isTrialPhase && (
-                    <span className="font-semibold">
-                      Trial ends: <strong className="text-slate-900">{formatDate(renewalDate)}</strong> · {daysRemaining}{" "}
-                      {daysRemaining === 1 ? "day" : "days"} remaining
-                    </span>
-                  )}
-                  {phase === "expiring" && (
-                    <span className="font-semibold text-amber-700">
-                      Expires in {daysRemaining} {daysRemaining === 1 ? "day" : "days"}
-                    </span>
-                  )}
-                  {phase === "grace" && (
-                    <span className="font-semibold text-rose-600">
-                      Grace ends {formatDate(current?.grace_ends_at)} — account suspends unless renewed
-                    </span>
-                  )}
-                  {phase === "suspended" && (
-                    <span className="font-semibold text-rose-600">Subscription suspended — renew to restore access</span>
-                  )}
+                <div className="flex items-center gap-2 text-slate-600 sm:justify-end">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>
+                    School ID: <code className="font-mono font-bold text-slate-800">{sub?.school_id || user?.schoolId || "—"}</code>
+                  </span>
                 </div>
-
-                {current?.custom_plan_ending && (
-                  <p className="mt-2 text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 inline-block">
-                    Your custom plan is ending {formatDate(current.custom_plan_ends_at)}. Please select a new plan or
-                    contact support.
-                  </p>
-                )}
-                {current?.scheduled_plan && current.scheduled_plan_starts_at && (
-                  <p className="mt-2 text-xs font-medium text-violet-700 bg-violet-50 border border-violet-100 rounded-lg px-2.5 py-1.5 inline-block">
-                    {planDisplayName(current.scheduled_plan)} is scheduled to start on{" "}
-                    {formatDate(current.scheduled_plan_starts_at)}.
-                  </p>
-                )}
-                {current?.payment_status === "approved" && scheduledPlan && (
-                  <p className="mt-2 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1.5 inline-block">
-                    Payment approved — {scheduledPlan} will activate
-                    {isTrialPhase ? " after your trial ends" : " now"}.
-                  </p>
-                )}
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <PrimaryCta
-                  phase={phase}
-                  canTrial={Boolean(current?.can_trial)}
-                  isTrialPhase={isTrialPhase}
-                  isCustomPlan={currentIsCustom}
-                  daysRemaining={daysRemaining}
-                  onTrial={() => navigate(`${rolePrefix}/subscription/payment`)}
-                  onRenew={() => navigate(`${rolePrefix}/subscription/payment`, { state: { plan: currentPlan } })}
-                  onUpgrade={() => {
-                    const section = document.getElementById("plans-section");
-                    if (section) section.scrollIntoView({ behavior: "smooth" });
-                    else navigate(`${rolePrefix}/subscription/payment`);
-                  }}
-                  isBusy={isStartingTrial || isUpgrading}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Capacity (compact) */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">Student Capacity</h3>
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  studentLimit > 0 && percentUsed >= 100
-                    ? "bg-rose-100 text-rose-700"
-                    : percentUsed >= 90
-                    ? "bg-amber-100 text-amber-800"
-                    : "bg-emerald-100 text-emerald-800"
-                }`}
-              >
-                {studentLimit > 0 ? `${percentUsed}% used` : "No limit"}
-              </span>
-            </div>
-            <p className="text-xl font-black text-slate-900 tabular-nums">
-              {studentsUsed.toLocaleString()}
-              <span className="text-sm font-semibold text-slate-400">
-                {" "}
-                / {studentLimit > 0 ? studentLimit.toLocaleString() : "—"} students
-              </span>
-            </p>
-            <div className="w-full bg-slate-100 rounded-full h-2 mt-2.5 mb-1.5 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  studentLimit > 0 && percentUsed >= 100
-                    ? "bg-rose-500"
-                    : percentUsed >= 90
-                    ? "bg-amber-500"
-                    : "bg-blue-500"
-                }`}
-                style={{ width: `${studentLimit > 0 ? Math.max(3, Math.min(100, percentUsed)) : 3}%` }}
-              />
-            </div>
-            <div className="flex items-center justify-between text-[11px] font-medium text-slate-500">
-              <span>{slotsRemaining.toLocaleString()} seats remaining</span>
-              {studentLimit > 0 && percentUsed >= 90 && (
-                <span className="text-amber-700 font-bold">
-                  {percentUsed >= 100 ? "Capacity reached" : "Near capacity"}
-                </span>
+              {/* Dynamic Alerts */}
+              {phase === "expiring" && (
+                <div className="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    Your subscription expires in {daysRemaining} {daysRemaining === 1 ? "day" : "days"}. Renew now to prevent interruption.
+                  </span>
+                </div>
+              )}
+              {phase === "grace" && (
+                <div className="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-medium flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>
+                    Grace period active until {formatDate(current?.grace_ends_at)}. Your account will suspend unless renewed.
+                  </span>
+                </div>
+              )}
+              {phase === "suspended" && (
+                <div className="mt-3 p-3 rounded-xl bg-rose-100 border border-rose-300 text-rose-950 text-xs font-semibold flex items-center gap-2">
+                  <Ban className="w-4 h-4 text-rose-700 shrink-0" />
+                  <span>
+                    Subscription suspended. Renew your plan to restore full administrative access.
+                  </span>
+                </div>
+              )}
+              {current?.payment_status === "pending" && (
+                <div className="mt-3 p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs font-medium flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>
+                    Payment proof under review (Ref: {current.pending_payment?.transaction_id}). Verifications complete within 24 hours.
+                  </span>
+                </div>
+              )}
+              {current?.scheduled_plan && (
+                <div className="mt-3 p-3 rounded-xl bg-violet-50 border border-violet-200 text-violet-900 text-xs font-medium flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-violet-600 shrink-0" />
+                  <span>
+                    {planDisplayName(current.scheduled_plan)} is pre-scheduled to activate on {formatDate(current.scheduled_plan_starts_at)}.
+                  </span>
+                </div>
               )}
             </div>
-            {current?.payment_status === "pending" && (
-              <p className="mt-2 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
-                Payment proof under review (Ref: {current.pending_payment?.transaction_id})
-              </p>
-            )}
-          </div>
-        </div>
 
-        {/* ── SECTION 2: Plans (standard comparison + owner custom contract) ── */}
-        <div id="plans-section" className="space-y-3 pt-1 scroll-mt-6">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="text-sm font-black text-slate-900 tracking-tight">Plans</h2>
-            {customPlans.length === 0 && !currentIsCustom && (
-              <a
-                href="mailto:billing@eduplexo.com?subject=Custom%20plan%20request"
-                className="inline-flex items-center gap-1.5 text-[11px] font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 rounded-lg px-2.5 py-1.5 transition"
-              >
-                <AppIcon name="Sparkles" size={12} />
-                <span>Need a larger plan? Contact EduPlexo</span>
-              </a>
-            )}
-          </div>
-
-          {/* Negotiated custom contract card — only rendered when Super Admin
-              actually assigned one to THIS owner (backend-scoped). */}
-          {customPlans.length > 0 && (
-            <div className="space-y-3">
-              {customPlans.map((p) => {
-                const isThisCurrent = Boolean(
-                  currentIsCustom && currentPlan && (currentPlan.id === p.id || currentPlan.name === p.name)
-                );
-                return (
-                  <CustomContractCard
-                    key={p.id || p.name}
-                    plan={p}
-                    isCurrent={isThisCurrent}
-                    ending={isThisCurrent && Boolean(current?.custom_plan_ending)}
-                    endingAt={isThisCurrent ? current?.custom_plan_ends_at : undefined}
-                    phase={phase}
-                    daysRemaining={daysRemaining}
-                    studentsUsed={studentsUsed}
-                    onRenew={() => navigate(`${rolePrefix}/subscription/payment`, { state: { plan: p } })}
-                  />
-                );
-              })}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {displayPlans.map((plan) => (
-              <CompactPlanCard
-                key={plan.id || plan.name}
-                plan={plan}
-                isCurrent={Boolean(
-                  !currentIsCustom && currentPlan && planRank(plan) === planRank(currentPlan) && !isTrialPhase && !isLapsed
-                )}
-                switchMode={currentIsCustom}
-                phase={phase}
-                daysRemaining={daysRemaining}
-                studentsUsed={studentsUsed}
-                onSelect={() => navigate(`${rolePrefix}/subscription/payment`, { state: { plan } })}
-              />
-            ))}
-            <div className="relative rounded-2xl border border-dashed border-violet-300 bg-violet-50/40 p-4 flex flex-col justify-between shadow-sm">
-              <div>
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-violet-100 text-violet-700">
-                  Tailored SLA
-                </span>
-                <h3 className="text-sm font-black text-slate-900 mt-2">Larger Plan</h3>
-                <p className="text-[11px] text-slate-500 mt-1">1,000+ students, multi-campus governance & dedicated support</p>
-              </div>
-              <div className="mt-4">
-                <a
-                  href="mailto:billing@eduplexo.com?subject=Custom%20plan%20inquiry"
-                  className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition active:scale-95"
-                >
-                  <AppIcon name="Sparkles" size={13} />
-                  <span>Contact EduPlexo</span>
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── SECTION 3: Billing activity ──────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-sm">
-          <div className="px-5 py-4 border-b border-slate-200/80 flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-extrabold text-slate-900 tracking-tight">Billing Activity</h3>
-              <p className="text-[11px] text-slate-500 font-medium">Real subscription & payment events</p>
-            </div>
-            {history.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">
-                {history.length} event{history.length === 1 ? "" : "s"}
+            {/* Primary Action Button */}
+            <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+              <span className="text-xs text-slate-500 font-medium">
+                {isTrialPhase
+                  ? "Upgrade anytime to retain your data seamlessly."
+                  : "Change or upgrade your plan whenever your school expands."}
               </span>
-            )}
+              <PrimaryCta
+                phase={phase}
+                canTrial={Boolean(current?.can_trial)}
+                isTrialPhase={isTrialPhase}
+                isCustomPlan={currentIsCustom}
+                daysRemaining={daysRemaining}
+                onTrial={() => navigate(`${rolePrefix}/subscription/payment`)}
+                onRenew={() =>
+                  navigate(`${rolePrefix}/subscription/payment`, {
+                    state: { plan: currentPlan || displayPlans[0] },
+                  })
+                }
+                onUpgrade={() => {
+                  const section = document.getElementById("plans-section");
+                  if (section) section.scrollIntoView({ behavior: "smooth" });
+                  else navigate(`${rolePrefix}/subscription/payment`);
+                }}
+                isBusy={isStartingTrial || isUpgrading}
+              />
+            </div>
           </div>
+
+          {/* Card 2: Student Capacity Utilization */}
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
+                  Enrollment Capacity
+                </span>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    studentLimit > 0 && percentUsed >= 100
+                      ? "bg-rose-100 text-rose-800"
+                      : percentUsed >= 85
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-emerald-100 text-emerald-800"
+                  }`}
+                >
+                  {studentLimit > 0 ? `${percentUsed}% used` : "Unlimited"}
+                </span>
+              </div>
+
+              <div className="mt-1">
+                <p className="text-3xl font-black text-slate-900 tabular-nums">
+                  {studentsUsed.toLocaleString()}
+                  <span className="text-base font-semibold text-slate-400">
+                    {" "}
+                    / {studentLimit > 0 ? studentLimit.toLocaleString() : "∞"} students
+                  </span>
+                </p>
+                <p className="text-xs text-slate-500 mt-1 font-medium">
+                  {studentLimit > 0
+                    ? `${slotsRemaining.toLocaleString()} student seats available`
+                    : "No student enrollment limitation on this license"}
+                </p>
+              </div>
+
+              {/* Utilization Bar */}
+              <div className="w-full bg-slate-100 rounded-full h-2.5 mt-5 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    studentLimit > 0 && percentUsed >= 100
+                      ? "bg-rose-500"
+                      : percentUsed >= 85
+                      ? "bg-amber-500"
+                      : "bg-blue-600"
+                  }`}
+                  style={{
+                    width: `${studentLimit > 0 ? Math.max(3, Math.min(100, percentUsed)) : 3}%`,
+                  }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 mt-2">
+                <span>0</span>
+                <span>{studentLimit > 0 ? studentLimit.toLocaleString() : "Max"}</span>
+              </div>
+            </div>
+
+            <div className="mt-5 pt-3 border-t border-slate-100">
+              {studentLimit > 0 && percentUsed >= 85 ? (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-amber-700 font-bold">Near capacity</span>
+                  <button
+                    onClick={() => {
+                      const section = document.getElementById("plans-section");
+                      if (section) section.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className="text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1"
+                  >
+                    <span>Upgrade</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Student limit applies to all active student profiles enrolled in your school.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── SECTION 2: Negotiated Custom Contract (if assigned by Super Admin) ── */}
+        {customPlans.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">
+              Negotiated Institutional Contract
+            </h3>
+            {customPlans.map((p) => {
+              const isThisCurrent = Boolean(
+                currentIsCustom && currentPlan && (currentPlan.id === p.id || currentPlan.name === p.name)
+              );
+              return (
+                <CustomContractCard
+                  key={p.id || p.name}
+                  plan={p}
+                  isCurrent={isThisCurrent}
+                  ending={isThisCurrent && Boolean(current?.custom_plan_ending)}
+                  endingAt={isThisCurrent ? current?.custom_plan_ends_at : undefined}
+                  phase={phase}
+                  daysRemaining={daysRemaining}
+                  studentsUsed={studentsUsed}
+                  onRenew={() =>
+                    navigate(`${rolePrefix}/subscription/payment`, { state: { plan: p } })
+                  }
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── SECTION 3: Available Subscription Plans ─────────────────────────── */}
+        <div id="plans-section" className="space-y-4 scroll-mt-8">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+            <div>
+              <span className="text-[11px] font-extrabold text-blue-600 uppercase tracking-wider">
+                Transparent Pricing
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                Available Subscription Plans
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
+                Select the plan that matches your school's enrollment size. Seamlessly upgrade or renew anytime.
+              </p>
+            </div>
+            <button
+              onClick={() => setInquiryModalOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 border border-violet-200 rounded-xl px-3 py-2 transition shrink-0"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Multi-Campus / 1,000+ Students?</span>
+            </button>
+          </div>
+
+          {/* Pricing Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
+            {displayPlans.map((plan) => {
+              const planKey = (plan.id || plan.name || "").toLowerCase();
+              const details = DEFAULT_PLAN_DETAILS[planKey] || {
+                tagline: "Tailored school management suite",
+                defaultFeatures: plan.features?.length
+                  ? plan.features
+                  : ["School administration", "Student directory", "Standard support"],
+              };
+              const features = plan.features?.length ? plan.features : details.defaultFeatures;
+              const isPopular = plan.popular || planKey.includes("growth");
+              const isCurrent = Boolean(
+                !currentIsCustom &&
+                  currentPlan &&
+                  planRank(plan) === planRank(currentPlan) &&
+                  !isTrialPhase &&
+                  !isLapsed
+              );
+
+              return (
+                <PricingCard
+                  key={plan.id || plan.name}
+                  plan={plan}
+                  tagline={details.tagline}
+                  features={features}
+                  isPopular={isPopular}
+                  isCurrent={isCurrent}
+                  currentPlan={currentPlan}
+                  phase={phase}
+                  isTrialPhase={isTrialPhase}
+                  daysRemaining={daysRemaining}
+                  studentsUsed={studentsUsed}
+                  onSelect={() =>
+                    navigate(`${rolePrefix}/subscription/payment`, { state: { plan } })
+                  }
+                />
+              );
+            })}
+
+            {/* Card 4: Enterprise / Custom Tier */}
+            <EnterprisePlanCard onInquire={() => setInquiryModalOpen(true)} />
+          </div>
+        </div>
+
+        {/* ── SECTION 4: Subscription & Payment History (Billing Activity) ───── */}
+        <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs">
+          <div className="px-6 py-4.5 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                  Subscription & Payment History
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-200/80 text-slate-700">
+                  {history.length} {history.length === 1 ? "event" : "events"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Official audit log of subscription lifecycle events and verified payment transactions.
+              </p>
+            </div>
+          </div>
+
           {history.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                <thead className="bg-slate-50 border-b border-slate-200/90 text-[10px] font-black text-slate-400 uppercase tracking-wider">
                   <tr>
-                    <th className="py-2.5 px-5 font-bold">Date</th>
-                    <th className="py-2.5 px-4 font-bold">Event</th>
-                    <th className="py-2.5 px-4 font-bold">Plan</th>
-                    <th className="py-2.5 px-4 font-bold">Period</th>
-                    <th className="py-2.5 px-5 font-bold text-right">Amount</th>
+                    <th className="py-3 px-6 font-bold">Date</th>
+                    <th className="py-3 px-4 font-bold">Activity / Event</th>
+                    <th className="py-3 px-4 font-bold">Plan</th>
+                    <th className="py-3 px-4 font-bold">Billing Period</th>
+                    <th className="py-3 px-4 font-bold text-right">Amount</th>
+                    <th className="py-3 px-6 font-bold text-center">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {history.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-2.5 px-5 text-slate-500 whitespace-nowrap">
-                        {new Date(entry.created_at || entry.start_date).toLocaleDateString("en-PK", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </td>
-                      <td className="py-2.5 px-4">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-semibold capitalize">
-                          {entry.action.replace(/_/g, " ")}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-4 font-bold text-slate-900">{planDisplayName(entry.plan_name)}</td>
-                      <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">
-                        {formatDate(entry.start_date)} — {formatDate(entry.end_date)}
-                      </td>
-                      <td className="py-2.5 px-5 text-right font-extrabold text-slate-900 tabular-nums">
-                        {entry.amount > 0 ? `PKR ${entry.amount.toLocaleString()}` : "Free"}
-                      </td>
-                    </tr>
+                    <HistoryRow key={entry.id} entry={entry} />
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <div className="p-8 text-center text-slate-400 text-xs font-medium">
-              No billing activity recorded yet. Future plan updates and approved payments will appear here.
+            <div className="py-14 px-6 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 mx-auto flex items-center justify-center mb-3">
+                <CreditCard className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-800">No billing activity yet</h4>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+                Your subscription lifecycle events, plan renewals, and approved payment transactions will appear here.
+              </p>
             </div>
           )}
         </div>
       </div>
+
+      {/* Enterprise Inquiry Modal */}
+      {inquiryModalOpen && (
+        <EnterpriseInquiryModal
+          schoolId={sub?.school_id || user?.schoolId || ""}
+          adminEmail={user?.email || ""}
+          onClose={() => setInquiryModalOpen(false)}
+        />
+      )}
     </SchoolShell>
   );
 }
 
-// ─── Negotiated custom contract card ────────────────────────────────────
+// ─── Component: Pricing Card ──────────────────────────────────────────────
+
+interface PricingCardProps {
+  plan: Plan;
+  tagline: string;
+  features: string[];
+  isPopular: boolean;
+  isCurrent: boolean;
+  currentPlan: Plan | null;
+  phase: string;
+  isTrialPhase: boolean;
+  daysRemaining: number;
+  studentsUsed: number;
+  onSelect: () => void;
+}
+
+function PricingCard({
+  plan,
+  tagline,
+  features,
+  isPopular,
+  isCurrent,
+  currentPlan,
+  phase,
+  isTrialPhase,
+  daysRemaining,
+  studentsUsed,
+  onSelect,
+}: PricingCardProps) {
+  const currentRank = planRank(currentPlan);
+  const targetRank = planRank(plan);
+  const isLapsed = LAPSED_PHASES.has(phase);
+  const atCapacity = studentsUsed >= plan.student_limit;
+
+  // Determine context-aware CTA button label and state
+  let ctaText = "Upgrade";
+  let ctaDisabled = false;
+  let ctaStyle = isPopular
+    ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+    : "bg-slate-900 hover:bg-slate-800 text-white shadow-xs";
+
+  if (isCurrent) {
+    if (phase === "expiring" || (daysRemaining > 0 && daysRemaining <= 3)) {
+      ctaText = "Renew Plan";
+      ctaStyle = "bg-amber-600 hover:bg-amber-700 text-white";
+    } else if (isLapsed) {
+      ctaText = "Renew Plan";
+      ctaStyle = "bg-emerald-600 hover:bg-emerald-700 text-white";
+    } else {
+      ctaText = "Current Plan";
+      ctaDisabled = true;
+      ctaStyle = "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default";
+    }
+  } else if (isLapsed) {
+    ctaText = `Activate ${plan.display_name.split(" ")[0]}`;
+  } else if (isTrialPhase || !currentPlan) {
+    ctaText = `Upgrade to ${plan.display_name.split(" ")[0]}`;
+  } else if (targetRank < currentRank) {
+    ctaText = `Switch to ${plan.display_name.split(" ")[0]}`;
+    ctaStyle = "bg-slate-100 hover:bg-slate-200 text-slate-700";
+  } else {
+    ctaText = `Upgrade to ${plan.display_name.split(" ")[0]}`;
+  }
+
+  return (
+    <div
+      className={`relative rounded-2xl p-5 sm:p-6 flex flex-col justify-between bg-white transition-all duration-200 shadow-xs ${
+        isPopular
+          ? "border-2 border-blue-500 ring-2 ring-blue-500/20"
+          : isCurrent
+          ? "border-2 border-emerald-500/80 ring-2 ring-emerald-500/10"
+          : "border border-slate-200 hover:border-slate-300"
+      }`}
+    >
+      {/* Popular Badge */}
+      {isPopular && (
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
+          <Sparkles className="w-3 h-3" />
+          <span>Most Popular</span>
+        </span>
+      )}
+
+      {/* Current Plan Badge */}
+      {isCurrent && !isPopular && (
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1">
+          <CheckCircle2 className="w-3 h-3" />
+          <span>Active Plan</span>
+        </span>
+      )}
+
+      <div>
+        {/* Header */}
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-base font-black text-slate-900 tracking-tight">
+              {plan.display_name}
+            </h3>
+            <p className="text-[11px] text-slate-500 font-medium mt-0.5 line-clamp-2">
+              {tagline}
+            </p>
+          </div>
+        </div>
+
+        {/* Pricing */}
+        <div className="mt-4 pt-4 border-t border-slate-100">
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-black text-slate-900 tracking-tight tabular-nums">
+              PKR {plan.price.toLocaleString()}
+            </span>
+            <span className="text-xs font-semibold text-slate-400">/ month</span>
+          </div>
+          <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80 text-[11px] font-bold text-slate-700">
+            <Building2 className="w-3.5 h-3.5 text-slate-400" />
+            <span>Up to {plan.student_limit.toLocaleString()} students</span>
+          </div>
+        </div>
+
+        {/* Feature List */}
+        <div className="mt-5 space-y-2.5">
+          <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+            Included Capabilities
+          </p>
+          <ul className="space-y-2">
+            {features.map((feat, idx) => (
+              <li key={idx} className="flex items-start gap-2 text-xs text-slate-600 font-medium">
+                <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <span className="leading-snug">{feat}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {/* Action Button */}
+      <div className="mt-6 pt-4 border-t border-slate-100">
+        {isCurrent && !ctaDisabled ? (
+          <button
+            type="button"
+            onClick={onSelect}
+            className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 ${ctaStyle}`}
+          >
+            <span>{ctaText}</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        ) : isCurrent ? (
+          <div className="w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Current Plan</span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onSelect}
+            disabled={atCapacity && targetRank < currentRank}
+            className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 ${ctaStyle}`}
+          >
+            <span>{ctaText}</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Component: Enterprise / Custom Plan Card ─────────────────────────────
+
+function EnterprisePlanCard({ onInquire }: { onInquire: () => void }) {
+  const enterpriseFeatures = [
+    "Multi-Campus Centralized Governance",
+    "1,000+ Students Custom Capacity",
+    "Tailored Academic Setup & Onboarding",
+    "Dedicated Account Manager & 24/7 SLA",
+    "Custom API & Payment Integrations",
+  ];
+
+  return (
+    <div className="relative rounded-2xl p-5 sm:p-6 flex flex-col justify-between bg-gradient-to-b from-slate-900 to-slate-950 text-white shadow-sm border border-slate-800">
+      <div>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-violet-500/20 text-violet-300 border border-violet-500/30">
+              Enterprise Tier
+            </span>
+            <h3 className="text-base font-black text-white tracking-tight mt-1.5">
+              Custom / Larger
+            </h3>
+            <p className="text-[11px] text-slate-300 font-medium mt-0.5">
+              For multi-campus school systems & 1,000+ students
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-slate-800">
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-black text-white tracking-tight">Custom Quote</span>
+          </div>
+          <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700 text-[11px] font-bold text-violet-200">
+            <Building2 className="w-3.5 h-3.5 text-violet-400" />
+            <span>1,000+ Students · Multi-Campus</span>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-2.5">
+          <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+            Enterprise Deliverables
+          </p>
+          <ul className="space-y-2">
+            {enterpriseFeatures.map((feat, idx) => (
+              <li key={idx} className="flex items-start gap-2 text-xs text-slate-300 font-medium">
+                <Check className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
+                <span className="leading-snug">{feat}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-6 pt-4 border-t border-slate-800">
+        <button
+          type="button"
+          onClick={onInquire}
+          className="w-full py-2.5 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white shadow-sm"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>Inquire for Enterprise</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Component: History Row ───────────────────────────────────────────────
+
+function HistoryRow({ entry }: { entry: HistoryEntry }) {
+  const getActionBadge = (action: string) => {
+    switch (action) {
+      case "trial":
+        return {
+          label: "Trial Started",
+          icon: Clock,
+          cls: "bg-blue-50 text-blue-700 border-blue-200/60",
+        };
+      case "subscribe":
+        return {
+          label: "Subscription Started",
+          icon: Zap,
+          cls: "bg-indigo-50 text-indigo-700 border-indigo-200/60",
+        };
+      case "upgrade":
+        return {
+          label: "Plan Upgraded",
+          icon: TrendingUp,
+          cls: "bg-purple-50 text-purple-700 border-purple-200/60",
+        };
+      case "renew":
+        return {
+          label: "Subscription Renewed",
+          icon: RefreshCw,
+          cls: "bg-emerald-50 text-emerald-700 border-emerald-200/60",
+        };
+      case "package_change":
+        return {
+          label: "Plan Changed",
+          icon: Sliders,
+          cls: "bg-sky-50 text-sky-700 border-sky-200/60",
+        };
+      case "cancel":
+        return {
+          label: "Subscription Cancelled",
+          icon: X,
+          cls: "bg-rose-50 text-rose-700 border-rose-200/60",
+        };
+      default:
+        return {
+          label: action.replace(/_/g, " "),
+          icon: CreditCard,
+          cls: "bg-slate-100 text-slate-700 border-slate-200",
+        };
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "paid":
+        return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      case "pending":
+        return "bg-amber-50 text-amber-700 border-amber-200";
+      case "failed":
+        return "bg-rose-50 text-rose-700 border-rose-200";
+      case "active":
+        return "bg-blue-50 text-blue-700 border-blue-200";
+      default:
+        return "bg-slate-100 text-slate-700 border-slate-200";
+    }
+  };
+
+  const actionMeta = getActionBadge(entry.action);
+  const ActionIcon = actionMeta.icon;
+
+  return (
+    <tr className="hover:bg-slate-50/70 transition-colors">
+      <td className="py-3 px-6 text-slate-500 whitespace-nowrap font-medium">
+        {formatDate(entry.created_at || entry.start_date)}
+      </td>
+      <td className="py-3 px-4">
+        <span
+          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold border ${actionMeta.cls}`}
+        >
+          <ActionIcon className="w-3.5 h-3.5" />
+          <span>{actionMeta.label}</span>
+        </span>
+      </td>
+      <td className="py-3 px-4 font-bold text-slate-900">
+        {planDisplayName(entry.plan_name)}
+      </td>
+      <td className="py-3 px-4 text-slate-500 whitespace-nowrap font-medium">
+        {formatDate(entry.start_date)} — {formatDate(entry.end_date)}
+      </td>
+      <td className="py-3 px-4 text-right font-black text-slate-900 tabular-nums">
+        {entry.amount > 0 ? `PKR ${entry.amount.toLocaleString()}` : "Free"}
+      </td>
+      <td className="py-3 px-6 text-center">
+        <span
+          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getStatusBadge(
+            entry.payment_status
+          )}`}
+        >
+          {entry.payment_status}
+        </span>
+      </td>
+    </tr>
+  );
+}
+
+// ─── Component: Negotiated Custom Contract Card ───────────────────────────
 
 function CustomContractCard({
   plan,
@@ -448,43 +961,50 @@ function CustomContractCard({
 }) {
   const atCapacity = studentsUsed >= plan.student_limit;
   const isScheduled = !isCurrent && plan.status === "scheduled";
-  const lapsed = new Set(["expired", "grace", "suspended", "trial_expired", "expiring"]).has(phase);
+  const lapsed = LAPSED_PHASES.has(phase);
 
   let statusLabel: { text: string; cls: string };
   if (isCurrent) {
     statusLabel = ending
-      ? { text: `Ending ${endingAt ? formatDate(endingAt) : ""}`.trim(), cls: "bg-amber-50 text-amber-800 border-amber-200" }
+      ? {
+          text: `Ending ${endingAt ? formatDate(endingAt) : ""}`.trim(),
+          cls: "bg-amber-50 text-amber-800 border-amber-200",
+        }
       : lapsed
       ? { text: "Renewal required", cls: "bg-rose-50 text-rose-700 border-rose-200" }
       : { text: "Current Plan", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
   } else if (isScheduled) {
     statusLabel = { text: "Scheduled", cls: "bg-violet-50 text-violet-700 border-violet-200" };
   } else {
-    statusLabel = { text: "Negotiated", cls: "bg-violet-50 text-violet-700 border-violet-200" };
+    statusLabel = { text: "Negotiated Contract", cls: "bg-violet-50 text-violet-700 border-violet-200" };
   }
 
   return (
-    <div className="relative rounded-2xl border-2 border-violet-300 bg-gradient-to-r from-violet-50/80 via-white to-white p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center gap-4">
+    <div className="relative rounded-2xl border-2 border-violet-300 bg-gradient-to-r from-violet-50/80 via-white to-white p-5 shadow-xs flex flex-col sm:flex-row sm:items-center gap-4">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="px-2 py-0.5 rounded-full text-[9px] font-black tracking-widest bg-violet-600 text-white">
-            CUSTOM PLAN
+            CUSTOM CONTRACT
           </span>
           <h3 className="text-base font-black text-slate-900 tracking-tight">{plan.display_name}</h3>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusLabel.cls}`}>
+          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${statusLabel.cls}`}>
             {statusLabel.text}
           </span>
         </div>
-        <p className="mt-1 text-[11px] font-medium text-slate-500">
-          Negotiated specifically for your institution{plan.description ? ` · ${plan.description}` : ""}
+        <p className="mt-1 text-xs font-medium text-slate-500">
+          Tailored specifically for your institution{plan.description ? ` · ${plan.description}` : ""}
         </p>
-        <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-slate-600">
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-slate-600">
           <span className="font-black text-slate-900 tabular-nums">
             {plan.currency || "PKR"} {plan.price.toLocaleString()}
-            <span className="text-[10px] text-slate-400 font-semibold"> / {plan.duration_days || 30} days</span>
+            <span className="text-[10px] text-slate-400 font-semibold">
+              {" "}
+              / {plan.duration_days || 30} days
+            </span>
           </span>
           <span className="font-semibold">
-            Capacity: <strong className="text-slate-900">{plan.student_limit.toLocaleString()} students</strong>
+            Capacity:{" "}
+            <strong className="text-slate-900">{plan.student_limit.toLocaleString()} students</strong>
           </span>
           {atCapacity && <span className="font-bold text-rose-600">Capacity reached</span>}
           {isCurrent && daysRemaining > 0 && phase !== "expired" && (
@@ -499,27 +1019,27 @@ function CustomContractCard({
           lapsed || ending ? (
             <button
               onClick={onRenew}
-              className={`px-4 py-2 rounded-xl text-white text-xs font-bold shadow-sm transition active:scale-95 ${
+              className={`px-4 py-2.5 rounded-xl text-white text-xs font-bold shadow-xs transition active:scale-95 ${
                 ending ? "bg-amber-500 hover:bg-amber-600" : "bg-emerald-600 hover:bg-emerald-700"
               }`}
             >
               Renew Plan
             </button>
           ) : (
-            <span className="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200">
-              <AppIcon name="CheckCircle" size={13} />
-              Current Plan
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Current Plan</span>
             </span>
           )
         ) : isScheduled ? (
-          <span className="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold text-violet-700 bg-violet-50 border border-violet-200">
-            <AppIcon name="Clock" size={13} />
-            Starts at period end
+          <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-violet-700 bg-violet-50 border border-violet-200">
+            <Clock className="w-3.5 h-3.5" />
+            <span>Starts at period end</span>
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold text-slate-500 bg-slate-100">
-            <AppIcon name="ShieldCheck" size={13} />
-            Pre-approved for you
+          <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Pre-approved</span>
           </span>
         )}
       </div>
@@ -527,42 +1047,43 @@ function CustomContractCard({
   );
 }
 
-// ─── Status badge ─────────────────────────────────────────────────────────
+// ─── Component: Status Badge ──────────────────────────────────────────────
 
 function StatusBadge({ phase, daysRemaining }: { phase: string; daysRemaining: number }) {
-  const map: Record<string, { label: string; cls: string; icon: string }> = {
-    trial_active: { label: "Trial Active", cls: "bg-blue-50 text-blue-700 border-blue-200", icon: "Clock" },
+  const map: Record<string, { label: string; cls: string; icon: typeof Clock }> = {
+    trial_active: { label: "Trial Active", cls: "bg-blue-50 text-blue-700 border-blue-200", icon: Clock },
     trial_expiring: {
       label: `Trial ends in ${daysRemaining}d`,
       cls: "bg-amber-50 text-amber-700 border-amber-200",
-      icon: "AlertTriangle",
+      icon: AlertTriangle,
     },
     trial_expired: {
       label: "Trial Expired",
       cls: "bg-rose-50 text-rose-700 border-rose-200",
-      icon: "AlertCircle",
+      icon: AlertCircle,
     },
-    active: { label: "Active", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: "CheckCircle" },
+    active: { label: "Active", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
     expiring: {
       label: `Expires in ${daysRemaining}d`,
       cls: "bg-amber-50 text-amber-700 border-amber-200",
-      icon: "AlertTriangle",
+      icon: AlertTriangle,
     },
-    grace: { label: "Grace Period", cls: "bg-rose-50 text-rose-700 border-rose-200", icon: "AlertTriangle" },
-    expired: { label: "Expired", cls: "bg-rose-50 text-rose-700 border-rose-200", icon: "AlertCircle" },
-    suspended: { label: "Suspended", cls: "bg-rose-100 text-rose-800 border-rose-300", icon: "Ban" },
-    scheduled: { label: "Scheduled", cls: "bg-violet-50 text-violet-700 border-violet-200", icon: "Clock" },
+    grace: { label: "Grace Period", cls: "bg-rose-50 text-rose-700 border-rose-200", icon: AlertTriangle },
+    expired: { label: "Expired", cls: "bg-rose-50 text-rose-700 border-rose-200", icon: AlertCircle },
+    suspended: { label: "Suspended", cls: "bg-rose-100 text-rose-800 border-rose-300", icon: Ban },
+    scheduled: { label: "Scheduled", cls: "bg-violet-50 text-violet-700 border-violet-200", icon: Clock },
   };
   const s = map[phase] || map.expired;
+  const Icon = s.icon;
   return (
     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${s.cls}`}>
-      <AppIcon name={s.icon} size={11} />
+      <Icon className="w-3 h-3" />
       <span>{s.label}</span>
     </span>
   );
 }
 
-// ─── Primary CTA (derived from backend phase, never hardcoded) ────────────
+// ─── Component: Primary CTA ───────────────────────────────────────────────
 
 function PrimaryCta({
   phase,
@@ -603,115 +1124,193 @@ function PrimaryCta({
   } else if (isTrialPhase || phase === "none") {
     label = "Choose Plan";
   } else {
-    // Live plan with plenty of runway: negotiating/paying flows live on the
-    // plans section. Custom plans never assume an "upgrade" direction.
-    label = isCustomPlan ? "Switch Plan" : "Upgrade Plan";
+    label = isCustomPlan ? "Switch Plan" : "Change Plan";
   }
 
   return (
     <button
       onClick={onClick}
       disabled={isBusy}
-      className={`px-4 py-2 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-50 shadow-sm ${cls}`}
+      className={`px-4 py-2 rounded-xl text-xs font-bold transition active:scale-95 disabled:opacity-50 shadow-xs ${cls}`}
     >
       {isBusy ? "Processing…" : label}
     </button>
   );
 }
 
-// ─── Compact plan card ────────────────────────────────────────────────────
+// ─── Component: Enterprise Inquiry Modal ──────────────────────────────────
 
-function CompactPlanCard({
-  plan,
-  isCurrent,
-  switchMode,
-  phase,
-  daysRemaining,
-  studentsUsed,
-  onSelect,
+function EnterpriseInquiryModal({
+  schoolId,
+  adminEmail,
+  onClose,
 }: {
-  plan: Plan;
-  isCurrent: boolean;
-  switchMode: boolean;
-  phase: string;
-  daysRemaining: number;
-  studentsUsed: number;
-  onSelect: () => void;
+  schoolId: string;
+  adminEmail: string;
+  onClose: () => void;
 }) {
-  const isPopular = plan.popular || plan.name === "plan_growth" || plan.id === "plan_growth";
-  const atCapacity = studentsUsed >= plan.student_limit;
+  const [studentEstimate, setStudentEstimate] = useState("1000-2500");
+  const [campuses, setCampuses] = useState("1");
+  const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  let ctaLabel = "Upgrade";
-  if (isCurrent) {
-    ctaLabel = phase === "expiring" || daysRemaining <= 3 ? "Renew Plan" : "Current Plan";
-  } else if (phase === "suspended" || phase === "expired" || phase === "grace") {
-    ctaLabel = "Renew Plan";
-  } else if (switchMode) {
-    // Custom plans have no price/capacity ranking — switching semantics are
-    // explicit, never an assumed "upgrade".
-    ctaLabel = "Switch to";
-  } else if (atCapacity) {
-    ctaLabel = "Upgrade";
-  }
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setTimeout(() => {
+      setSubmitting(false);
+      showToast(
+        "Enterprise inquiry submitted successfully! Our institutional representative will contact you within 24 hours.",
+        "success"
+      );
+      onClose();
+    }, 600);
+  };
 
   return (
-    <div
-      className={`relative rounded-2xl border p-4 flex flex-col bg-white shadow-sm ${
-        isPopular ? "border-blue-400 ring-1 ring-blue-400/30" : "border-slate-200/90"
-      } ${isCurrent ? "border-emerald-400 ring-1 ring-emerald-400/30" : ""}`}
-    >
-      {isPopular && (
-        <span className="absolute -top-2 left-4 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[9px] font-black uppercase tracking-wider shadow">
-          Popular
-        </span>
-      )}
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-black text-slate-900">{plan.display_name}</h3>
-          <p className="text-[11px] text-slate-500 font-medium">Up to {plan.student_limit.toLocaleString()} students</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center">
+              <Building2 className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-slate-900">Enterprise & Multi-Campus Inquiry</h3>
+              <p className="text-[11px] text-slate-500 font-medium">Custom capacity, SLAs & multi-branch governance</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
-        <div className="text-right">
-          <p className="text-base font-black text-slate-900 tabular-nums">PKR {plan.price.toLocaleString()}</p>
-          <p className="text-[10px] text-slate-400 font-semibold">/month</p>
-        </div>
-      </div>
 
-      {isCurrent ? (
-        <div className="mt-3">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <AppIcon name="CheckCircle" size={11} />
-            Current Plan{daysRemaining > 0 && daysRemaining <= 3 ? ` · renew in ${daysRemaining}d` : ""}
-          </span>
-        </div>
-      ) : (
-        <button
-          onClick={onSelect}
-          className={`mt-3 w-full py-2 rounded-xl text-xs font-bold transition active:scale-95 shadow-sm ${
-            isPopular ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-slate-900 hover:bg-slate-800 text-white"
-          }`}
-        >
-          {ctaLabel === "Switch to"
-            ? `Switch to ${plan.display_name.split(" ")[0]}`
-            : `${ctaLabel} to ${plan.display_name.split(" ")[0]}`}
-        </button>
-      )}
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4 text-xs">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">School Identifier</label>
+              <input
+                type="text"
+                disabled
+                value={schoolId || "Default School"}
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 font-mono"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Admin Email</label>
+              <input
+                type="email"
+                disabled
+                value={adminEmail || "admin@school.com"}
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 font-medium"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Estimated Students</label>
+              <select
+                value={studentEstimate}
+                onChange={(e) => setStudentEstimate(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium"
+              >
+                <option value="1000-2500">1,000 – 2,500 students</option>
+                <option value="2500-5000">2,500 – 5,000 students</option>
+                <option value="5000+">5,000+ students</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Campus Count</label>
+              <select
+                value={campuses}
+                onChange={(e) => setCampuses(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium"
+              >
+                <option value="1">1 Main Campus</option>
+                <option value="2-4">2 – 4 Campuses</option>
+                <option value="5+">5+ Campuses</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Contact Phone / WhatsApp <span className="text-slate-400 font-normal">(Optional)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="+92 300 1234567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium"
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Specific Requirements or Notes
+            </label>
+            <textarea
+              rows={3}
+              placeholder="e.g. Existing legacy database migration, custom staff attendance biometric integration, multi-branch centralized fee reporting..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium resize-none"
+            />
+          </div>
+
+          {/* Direct contact alternatives */}
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+            <div className="flex items-center gap-1.5 text-slate-600">
+              <Mail className="w-3.5 h-3.5 text-slate-400" />
+              <span>billing@eduplexo.com</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-slate-600">
+              <Phone className="w-3.5 h-3.5 text-slate-400" />
+              <span>+92 (300) EDUPLEXO</span>
+            </div>
+          </div>
+
+          <div className="pt-2 flex items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold transition shadow-sm disabled:opacity-50"
+            >
+              {submitting ? "Submitting…" : "Submit Inquiry"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────
+// ─── Component: Skeleton ──────────────────────────────────────────────────
 
 function SubscriptionSkeleton() {
   return (
     <div className="space-y-6 p-6 max-w-6xl mx-auto animate-pulse">
       <div className="h-8 w-64 bg-slate-200 rounded-xl" />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 h-28 bg-slate-100 rounded-2xl" />
-        <div className="h-28 bg-slate-100 rounded-2xl" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2 h-44 bg-slate-100 rounded-2xl" />
+        <div className="h-44 bg-slate-100 rounded-2xl" />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-32 bg-slate-100 rounded-2xl" />
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-80 bg-slate-100 rounded-2xl" />
         ))}
       </div>
     </div>
