@@ -1976,3 +1976,188 @@ func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 
 	api.WriteResult(w, api.Ok(map[string]any{"success": true, "settings": currentSettings}))
 }
+
+// ─── Super Admin Credentials Management ───────────────────────────────────
+
+// GetCredentials returns the current super admin's account details.
+// GET /api/super-admin/credentials
+func (h *Handler) GetCredentials(w http.ResponseWriter, r *http.Request) {
+	ctx, ok := requireSuperAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	h.Store.RLock()
+	defer h.Store.RUnlock()
+
+	var adminUser *store.User
+	for _, u := range h.Store.Users {
+		if (ctx.UserID != "" && u.ID == ctx.UserID) || (ctx.ActorEmail != "" && strings.EqualFold(u.Email, ctx.ActorEmail)) {
+			adminUser = u
+			break
+		}
+	}
+	if adminUser == nil {
+		for _, u := range h.Store.Users {
+			if u.Role == "super_admin" {
+				adminUser = u
+				break
+			}
+		}
+	}
+
+	if adminUser == nil {
+		api.WriteResult(w, api.Fail("NOT_FOUND", "Super admin user not found.", 404, nil))
+		return
+	}
+
+	api.WriteResult(w, api.Ok(map[string]any{
+		"id":         adminUser.ID,
+		"email":      adminUser.Email,
+		"role":       adminUser.Role,
+		"first_name": adminUser.Profile.FirstName,
+		"last_name":  adminUser.Profile.LastName,
+		"updated_at": adminUser.UpdatedAt,
+	}))
+}
+
+// UpdateCredentials allows the logged-in super admin to change their login email and/or password.
+// POST /api/super-admin/credentials
+// PATCH /api/super-admin/credentials
+func (h *Handler) UpdateCredentials(w http.ResponseWriter, r *http.Request) {
+	ctx, ok := requireSuperAdmin(w, r)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		CurrentPassword string `json:"current_password"`
+		NewEmail        string `json:"new_email"`
+		NewPassword     string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		api.WriteResult(w, api.Fail("VALIDATION_ERROR", "Invalid request body.", 400, nil))
+		return
+	}
+
+	currentPassword := strings.TrimSpace(body.CurrentPassword)
+	if currentPassword == "" {
+		api.WriteResult(w, api.Fail("VALIDATION_ERROR", "Current password is required to update credentials.", 400, nil))
+		return
+	}
+
+	newEmail := strings.ToLower(strings.TrimSpace(body.NewEmail))
+	newPassword := strings.TrimSpace(body.NewPassword)
+
+	if newEmail == "" && newPassword == "" {
+		api.WriteResult(w, api.Fail("VALIDATION_ERROR", "Either a new email or a new password must be provided.", 400, nil))
+		return
+	}
+
+	h.Store.Lock()
+	defer h.Store.Unlock()
+
+	var adminUser *store.User
+	for _, u := range h.Store.Users {
+		if (ctx.UserID != "" && u.ID == ctx.UserID) || (ctx.ActorEmail != "" && strings.EqualFold(u.Email, ctx.ActorEmail)) {
+			adminUser = u
+			break
+		}
+	}
+	if adminUser == nil {
+		for _, u := range h.Store.Users {
+			if u.Role == "super_admin" {
+				adminUser = u
+				break
+			}
+		}
+	}
+
+	if adminUser == nil {
+		api.WriteResult(w, api.Fail("NOT_FOUND", "Super admin user not found.", 404, nil))
+		return
+	}
+
+	// Verify current password
+	if !auth.VerifyPassword(currentPassword, adminUser.PasswordHash) {
+		api.WriteResult(w, api.Fail("UNAUTHORIZED", "Current password is incorrect.", 401, nil))
+		return
+	}
+
+	var updatedFields []string
+
+	// Process email change
+	if newEmail != "" && !strings.EqualFold(newEmail, adminUser.Email) {
+		if !strings.Contains(newEmail, "@") || len(newEmail) < 5 {
+			api.WriteResult(w, api.Fail("VALIDATION_ERROR", "Please provide a valid email address.", 400, nil))
+			return
+		}
+		// Ensure uniqueness across all other users
+		for _, u := range h.Store.Users {
+			if u.ID != adminUser.ID && strings.EqualFold(u.Email, newEmail) {
+				api.WriteResult(w, api.Fail("CONFLICT", "This email address is already in use by another account.", 409, nil))
+				return
+			}
+		}
+		adminUser.Email = newEmail
+		updatedFields = append(updatedFields, "email")
+	}
+
+	// Process password change
+	if newPassword != "" {
+		if len(newPassword) < 8 {
+			api.WriteResult(w, api.Fail("VALIDATION_ERROR", "New password must be at least 8 characters long.", 400, nil))
+			return
+		}
+		hash, err := auth.HashPassword(newPassword)
+		if err != nil {
+			api.WriteResult(w, api.Fail("INTERNAL_ERROR", "Failed to encrypt new password.", 500, nil))
+			return
+		}
+		adminUser.PasswordHash = hash
+		updatedFields = append(updatedFields, "password")
+	}
+
+	if len(updatedFields) == 0 {
+		api.WriteResult(w, api.Ok(map[string]any{
+			"success": true,
+			"message": "No changes were requested.",
+			"email":   adminUser.Email,
+			"user_id": adminUser.ID,
+		}))
+		return
+	}
+
+	adminUser.UpdatedAt = time.Now()
+	h.Persist("users", adminUser)
+	h.Store.RebuildIndexes()
+
+	// Asynchronously persist to Postgres if pool is active
+	if h.Pool != nil {
+		go func(uid, email, passHash string, updatedAt time.Time) {
+			pCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, _ = h.Pool.Exec(pCtx, `
+				UPDATE users
+				SET email = $1, password_hash = $2, updated_at = $3
+				WHERE id = $4
+			`, email, passHash, updatedAt, uid)
+		}(adminUser.ID, adminUser.Email, adminUser.PasswordHash, adminUser.UpdatedAt)
+	}
+
+	msg := "Credentials updated successfully."
+	if len(updatedFields) == 1 {
+		if updatedFields[0] == "email" {
+			msg = "Super admin email updated successfully."
+		} else {
+			msg = "Super admin password updated successfully."
+		}
+	}
+
+	api.WriteResult(w, api.Ok(map[string]any{
+		"success": true,
+		"message": msg,
+		"email":   adminUser.Email,
+		"user_id": adminUser.ID,
+	}))
+}

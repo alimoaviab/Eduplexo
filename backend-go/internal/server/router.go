@@ -628,6 +628,11 @@ func Router(cfg config.Config, s *store.MemStore, pg *persistence.Persister, rdb
 			r.Get("/super-admin/settings", saH.GetSettings)
 			r.Patch("/super-admin/settings", saH.UpdateSettings)
 
+			// Credentials Management (Change Email & Password)
+			r.Get("/super-admin/credentials", saH.GetCredentials)
+			r.Post("/super-admin/credentials", saH.UpdateCredentials)
+			r.Patch("/super-admin/credentials", saH.UpdateCredentials)
+
 			// Global Question Bank (Super Admin only)
 			jq := realtime.NewJobQueue(rdb.Raw())
 

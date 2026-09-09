@@ -198,17 +198,29 @@ func EnsureBootstrapUsers(s *MemStore) {
 
 	schoolID := "school_default"
 
-	// Check existing users and update roles/passwords
+	// Check existing users and find super_admin
 	var superUser *User
 	var schoolUser *User
 	for _, u := range s.Users {
-		if u.Email == superEmail {
-			u.Role = "super_admin"
-			u.Permissions = []string{"*"}
+		if u.Role == "super_admin" {
 			superUser = u
+			break
 		}
+	}
+	if superUser == nil {
+		for _, u := range s.Users {
+			if u.Email == superEmail {
+				u.Role = "super_admin"
+				u.Permissions = []string{"*"}
+				superUser = u
+				break
+			}
+		}
+	}
+	for _, u := range s.Users {
 		if u.Email == schoolEmail && u.Role == "admin" {
 			schoolUser = u
+			break
 		}
 	}
 
@@ -295,8 +307,10 @@ func EnsureBootstrapUsers(s *MemStore) {
 	}
 
 	if superUser != nil {
-		hash, _ := auth.HashPassword(superPassword)
-		superUser.PasswordHash = hash
+		if superUser.PasswordHash == "" {
+			hash, _ := auth.HashPassword(superPassword)
+			superUser.PasswordHash = hash
+		}
 	} else {
 		// Super admins need a "system" school record to satisfy database FKs
 		hasSystemSchool := false
