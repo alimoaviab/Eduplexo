@@ -130,11 +130,16 @@ export default function App() {
       <div className="min-h-screen flex items-center justify-center bg-slate-50/70 p-4 font-sans">
         <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200/80 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
           <div className="flex justify-center mb-5">
-            <img
-              src="/favicon.png"
-              alt="Eduplexo Logo"
-              className="h-16 w-16 rounded-2xl shadow-md p-2.5 bg-gradient-to-tr from-blue-50 to-indigo-50 border border-blue-100 object-contain"
-            />
+            <div className="h-16 w-16 rounded-2xl overflow-hidden shadow-md ring-1 ring-slate-200 bg-white flex items-center justify-center">
+              <img
+                src="/logo.jpeg"
+                alt="Eduplexo"
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = '/favicon.png';
+                }}
+              />
+            </div>
           </div>
           
           <div className="text-center mb-6">
@@ -217,11 +222,16 @@ export default function App() {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
         <div className="max-w-6xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img
-              src="/favicon.png"
-              alt="Eduplexo"
-              className="h-9 w-9 rounded-xl object-contain p-1 bg-blue-50 border border-blue-100 shadow-xs"
-            />
+            <div className="h-9 w-9 rounded-xl overflow-hidden shadow-xs border border-slate-200/80 bg-white flex items-center justify-center shrink-0">
+              <img
+                src="/logo.jpeg"
+                alt="Eduplexo"
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = '/favicon.png';
+                }}
+              />
+            </div>
             <div>
               <span className="font-extrabold text-sm sm:text-base tracking-tight text-slate-900">
                 Eduplexo Partner Portal

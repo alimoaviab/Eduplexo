@@ -64,11 +64,11 @@ export function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-600/30">
-            <AppIcon name="ShieldAlert" size={24} className="text-white" />
+          <div className="h-16 w-16 rounded-2xl overflow-hidden shadow-lg shadow-blue-600/15 border border-slate-200/80 bg-white mx-auto mb-4 flex items-center justify-center p-1.5 ring-1 ring-slate-100">
+            <img src="/logo.jpeg" alt="Eduplexo" className="h-full w-full object-contain rounded-xl" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Super Admin</h1>
-          <p className="text-sm text-slate-500 mt-1">Eduplexo Platform Control Panel</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Super Admin</h1>
+          <p className="text-xs text-slate-500 mt-1 font-medium">Eduplexo Platform Control Panel</p>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xl shadow-slate-200/50 space-y-4">

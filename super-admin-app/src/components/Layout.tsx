@@ -86,12 +86,12 @@ export function Layout() {
     <div className="flex h-screen bg-slate-50">
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-slate-200 flex flex-col">
-        <div className="h-14 flex items-center gap-2 px-5 border-b border-slate-100">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-sm shadow-blue-600/20">
-            <AppIcon name="ShieldAlert" size={14} className="text-white" />
+        <div className="h-14 flex items-center gap-2.5 px-5 border-b border-slate-100">
+          <div className="h-8 w-8 rounded-lg overflow-hidden shadow-xs border border-slate-200 bg-white flex items-center justify-center p-0.5 shrink-0">
+            <img src="/logo.jpeg" alt="Eduplexo" className="h-full w-full object-contain rounded-md" />
           </div>
           <div>
-            <span className="text-sm font-bold text-slate-900 block leading-none">Eduplexo</span>
+            <span className="text-sm font-extrabold text-slate-900 block leading-none">Eduplexo</span>
             <span className="text-[10px] text-slate-400 font-medium">Super Admin</span>
           </div>
         </div>
