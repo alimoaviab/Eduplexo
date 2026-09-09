@@ -1253,18 +1253,27 @@ func (h *Handler) SwitchAcademicYear(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Session implements GET /api/auth/session. Without a valid cookie it keeps
-// the old non-error `null` response; with a valid HttpOnly session cookie it
-// returns non-secret user context so browser apps do not need localStorage tokens.
+// Session implements GET /api/auth/session. Supports both Authorization Bearer
+// header (for SPA isolation across ports) and HttpOnly session cookies.
 func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	cookie, err := r.Cookie("session")
-	if err != nil || strings.TrimSpace(cookie.Value) == "" {
+
+	rawToken := ""
+	authz := r.Header.Get("Authorization")
+	if authz != "" && strings.HasPrefix(strings.ToLower(authz), "bearer ") {
+		rawToken = strings.TrimSpace(authz[7:])
+	}
+	if rawToken == "" {
+		if cookie, err := r.Cookie("session"); err == nil && strings.TrimSpace(cookie.Value) != "" {
+			rawToken = strings.TrimSpace(cookie.Value)
+		}
+	}
+	if rawToken == "" {
 		api.WriteJSON(w, http.StatusOK, nil)
 		return
 	}
 
-	claims, err := authpkg.VerifyToken(h.Cfg.JWTSecret, h.Cfg.AppName, cookie.Value)
+	claims, err := authpkg.VerifyToken(h.Cfg.JWTSecret, h.Cfg.AppName, rawToken)
 	if err != nil {
 		h.clearSessionCookie(w)
 		api.WriteJSON(w, http.StatusOK, nil)

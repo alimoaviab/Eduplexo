@@ -13,9 +13,12 @@ export function LoginPage() {
 
   // If already logged in, redirect to dashboard
   useEffect(() => {
-    apiRequest<{ role: string }>('/api/auth/session').then((res) => {
-      if (res.ok && res.data?.role === 'super_admin') navigate('/dashboard', { replace: true })
-    })
+    const storedToken = localStorage.getItem('sa_token')
+    if (storedToken) {
+      apiRequest<{ role: string }>('/api/auth/session').then((res) => {
+        if (res.ok && res.data?.role === 'super_admin') navigate('/dashboard', { replace: true })
+      })
+    }
   }, [navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -51,6 +54,9 @@ export function LoginPage() {
     }
 
     clearStoredSession()
+    if (data.token) {
+      localStorage.setItem('sa_token', data.token)
+    }
     sessionStorage.setItem('sa_user', JSON.stringify({
       id: data.user_id,
       email: data.email,

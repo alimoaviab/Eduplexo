@@ -402,17 +402,17 @@ func ListReferredSchools(ctx context.Context, pool *pgxpool.Pool, publisherID st
 			s.name, 
 			s.code, 
 			COALESCE(s.contact_email::text, ''), 
-			COALESCE(s.contact_phone, s.phone, ''), 
-			COALESCE(NULLIF(s.admin_name, ''), NULLIF(TRIM(u.first_name || ' ' || u.last_name), ''), ''),
+			COALESCE(s.contact_phone, s.admin_phone, ''), 
+			COALESCE(NULLIF(s.admin_name, ''), NULLIF(TRIM(u.profile_first || ' ' || u.profile_last), ''), ''),
 			COALESCE(NULLIF(s.admin_email::text, ''), NULLIF(u.email::text, ''), NULLIF(s.contact_email::text, ''), ''),
 			COALESCE(s.referral_admin_password, ''),
 			s.status, 
 			s.created_at
 		FROM schools s
 		LEFT JOIN LATERAL (
-			SELECT email, first_name, last_name 
+			SELECT email, profile_first, profile_last 
 			FROM users 
-			WHERE school_id = s.school_id AND role = 'admin' 
+			WHERE (school_id = s.school_id OR school_id = s.id) AND role = 'admin' 
 			ORDER BY created_at ASC 
 			LIMIT 1
 		) u ON true
@@ -462,17 +462,17 @@ func GetReferredSchoolByID(ctx context.Context, pool *pgxpool.Pool, publisherID 
 			s.name, 
 			s.code, 
 			COALESCE(s.contact_email::text, ''), 
-			COALESCE(s.contact_phone, s.phone, ''), 
-			COALESCE(NULLIF(s.admin_name, ''), NULLIF(TRIM(u.first_name || ' ' || u.last_name), ''), ''),
+			COALESCE(s.contact_phone, s.admin_phone, ''), 
+			COALESCE(NULLIF(s.admin_name, ''), NULLIF(TRIM(u.profile_first || ' ' || u.profile_last), ''), ''),
 			COALESCE(NULLIF(s.admin_email::text, ''), NULLIF(u.email::text, ''), NULLIF(s.contact_email::text, ''), ''),
 			COALESCE(s.referral_admin_password, ''),
 			s.status, 
 			s.created_at
 		FROM schools s
 		LEFT JOIN LATERAL (
-			SELECT email, first_name, last_name 
+			SELECT email, profile_first, profile_last 
 			FROM users 
-			WHERE school_id = s.school_id AND role = 'admin' 
+			WHERE (school_id = s.school_id OR school_id = s.id) AND role = 'admin' 
 			ORDER BY created_at ASC 
 			LIMIT 1
 		) u ON true

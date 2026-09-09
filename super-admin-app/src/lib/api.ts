@@ -30,12 +30,19 @@ export async function apiRequest<T = any>(
   url: string,
   options: RequestInit = {}
 ): Promise<{ ok: boolean; data?: T; message?: string; error?: any }> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('sa_token') : null
+  const authHeaders: Record<string, string> = {}
+  if (token) {
+    authHeaders['Authorization'] = `Bearer ${token}`
+  }
+
   try {
     const res = await fetch(resolveUrl(url), {
       ...options,
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders,
         ...(options.headers || {}),
       },
     })
