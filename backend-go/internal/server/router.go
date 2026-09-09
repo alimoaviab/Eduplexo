@@ -148,6 +148,9 @@ func Router(cfg config.Config, s *store.MemStore, pg *persistence.Persister, rdb
 		r.Post("/auth/google/calendar", stubs.NotImplemented("Google Calendar OAuth is not enabled in this environment."))
 		r.Post("/auth/google/disconnect", stubs.NotImplemented("Google Calendar OAuth is not enabled in this environment."))
 
+		// ─── Publisher Auth ──────────────────────────────────────────────
+		r.Post("/publisher/auth/login", authRL.Limit(authH.PublisherLogin))
+
 		// ─── Public SEO Engine (landing page tool, rate-limited) ─────────
 		seoH := seo.New(cfg.AnthropicAPIKey, rdb)
 		r.Post("/seo/generate", seoH.Generate)
@@ -197,6 +200,10 @@ func Router(cfg config.Config, s *store.MemStore, pg *persistence.Persister, rdb
 				r.Get("/referral/publishers/{id}/tokens", referralH.ListTokensForPublisher)
 				r.Post("/referral/generate", referralH.GenerateToken)
 			}
+
+			// ─── Publisher Portal ────────────────────────────────────────────
+			r.Get("/publisher/me", authH.PublisherMe)
+			r.Get("/publisher/dashboard", authH.PublisherDashboard)
 
 			// School campuses listing (scoped to caller's school context)
 			r.Get("/campuses", func(w http.ResponseWriter, r *http.Request) {
