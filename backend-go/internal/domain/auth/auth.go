@@ -873,6 +873,9 @@ func (h *Handler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 			if s.SchoolID == schoolID && s.Status == "pending" {
 				s.Status = "active"
 				s.UpdatedAt = now
+				if pending.ReferredByPublisherID != "" {
+					s.ReferredByPublisherID = pending.ReferredByPublisherID
+				}
 				h.Persist("schools", s)
 				break
 			}
@@ -896,6 +899,11 @@ func (h *Handler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	// the school portal agree immediately.
 	if newUser.Role == "admin" && schoolID != "system" && h.Pool != nil {
 		_ = subscription.EnsureSchoolTrial(r.Context(), h.Pool, schoolID)
+		if pending.ReferredByPublisherID != "" {
+			_, _ = h.Pool.Exec(r.Context(), `
+				UPDATE schools SET referred_by_publisher_id = $1, updated_at = NOW() WHERE school_id = $2
+			`, pending.ReferredByPublisherID, schoolID)
+		}
 	}
 
 	// Generate authenticated JWT session
