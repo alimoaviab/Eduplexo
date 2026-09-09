@@ -180,7 +180,7 @@ export function PublishersPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
             <AppIcon name="Link2" className="h-6 w-6 text-blue-600" />
-            Publishers & Referral Tracking
+            Partners & Referral Tracking
           </h1>
           <p className="text-slate-500 text-sm mt-1">
             Manage partner credentials and track schools created through referral links.
@@ -191,7 +191,7 @@ export function PublishersPage() {
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm flex items-center gap-2 active:scale-95"
         >
           <AppIcon name="Plus" className="h-4 w-4" />
-          Add Publisher
+          Add Partner
         </button>
       </div>
 
@@ -244,7 +244,7 @@ export function PublishersPage() {
         {loading ? (
           <div className="p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
             <div className="h-7 w-7 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-            <span className="text-sm font-medium">Loading publishers...</span>
+            <span className="text-sm font-medium">Loading partners...</span>
           </div>
         ) : filteredPublishers.length === 0 ? (
           <div className="p-16 text-center">
@@ -252,12 +252,12 @@ export function PublishersPage() {
               <AppIcon name="Link2" className="h-8 w-8 text-slate-400" />
             </div>
             <h3 className="text-slate-900 font-bold text-base mb-1">
-              {searchQuery ? 'No matching publishers found' : 'No Publishers Created Yet'}
+              {searchQuery ? 'No matching partners found' : 'No Partners Created Yet'}
             </h3>
             <p className="text-slate-500 text-sm max-w-sm mx-auto mb-5">
               {searchQuery
                 ? 'Try refining your search query.'
-                : 'Create your first publisher partner to generate unique referral links.'}
+                : 'Create your first partner to generate unique referral links.'}
             </p>
             {!searchQuery && (
               <button
@@ -265,7 +265,7 @@ export function PublishersPage() {
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all inline-flex items-center gap-2 shadow-sm"
               >
                 <AppIcon name="Plus" className="h-4 w-4" />
-                Add Publisher
+                Add Partner
               </button>
             )}
           </div>
@@ -415,7 +415,7 @@ export function PublishersPage() {
                 <div className="flex flex-col gap-2">
                   <button
                     onClick={() => {
-                      const text = `Eduplexo Publisher Partner Access:\n\nPortal: https://publisher.eduplexo.com\nEmail: ${createdResult.email}\nPassword: ${createdResult.password}\n\nYour Referral Link:\n${createdResult.referral_url}\nReferral Code: ${createdResult.referral_token}`
+                      const text = `Eduplexo Partner Access:\n\nPortal: https://partners.eduplexo.com\nEmail: ${createdResult.email}\nPassword: ${createdResult.password}\n\nYour Referral Link:\n${createdResult.referral_url}\nReferral Code: ${createdResult.referral_token}`
                       copyToClipboard(text, 'Credentials & link')
                     }}
                     className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 shadow-sm"
@@ -436,7 +436,7 @@ export function PublishersPage() {
               <div className="p-7">
                 <div className="flex justify-between items-center mb-5">
                   <div>
-                    <h2 className="text-lg font-bold text-slate-900">Add Publisher Partner</h2>
+                    <h2 className="text-lg font-bold text-slate-900">Add Partner</h2>
                     <p className="text-xs text-slate-500">Create login credentials and generate a unique referral link.</p>
                   </div>
                   <button
