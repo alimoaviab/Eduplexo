@@ -22,6 +22,7 @@ export interface DataStateProps {
   retryLabel?: string;
   icon?: string;
   inline?: boolean;
+  action?: React.ReactNode;
 }
 
 export function DataState({
@@ -32,6 +33,7 @@ export function DataState({
   retryLabel = "Try again",
   icon,
   inline = false,
+  action,
 }: DataStateProps) {
   const tokens = variantTokens[variant];
   const iconName = icon ?? tokens.icon;
@@ -58,6 +60,11 @@ export function DataState({
           <AppIcon name="RefreshCw" size={18} />
           {retryLabel}
         </button>
+      )}
+      {action && (
+        <div className="pt-1 flex items-center justify-center gap-2">
+          {action}
+        </div>
       )}
     </div>
   );

@@ -453,6 +453,32 @@ export function ResultPage() {
     });
   }, [state.data, searchQuery, classFilter, studentFilter, subjectFilter, dateFilter]);
 
+  const hasActiveFilters = Boolean(
+    searchQuery.trim() ||
+    classFilter !== "all" ||
+    examFilter !== "all" ||
+    studentFilter !== "all" ||
+    subjectFilter !== "all" ||
+    dateFilter
+  );
+
+  const clearAllFilters = useCallback(() => {
+    setSearchQuery("");
+    setClassFilter("all");
+    setExamFilter("all");
+    setStudentFilter("all");
+    setSubjectFilter("all");
+    setDateFilter("");
+    updateQuery({
+      search: "",
+      class_id: "all",
+      exam_id: "all",
+      student_id: "all",
+      subject_id: "all",
+      date: "",
+    });
+  }, [updateQuery]);
+
   // For sheet view: group by exam if exam_id is "all", else single group
   const sheetExamTitle = useMemo(() => {
     if (examFilter !== "all") {
@@ -663,166 +689,220 @@ export function ResultPage() {
         })()}
       />
 
-      {/* Toolbar */}
-      <div className="premium-card p-2 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white/80 backdrop-blur-md border-slate-200/60 shadow-sm rounded-xl no-print">
-        <div className="flex flex-1 items-center gap-2 flex-wrap">
-          {/* Search */}
-          <div className="relative min-w-[180px] flex-1">
-            <AppIcon name="Search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      {/* Toolbar Section - Two-tiered, Clean & Fully Responsive */}
+      <div className="premium-card p-3 sm:p-4 flex flex-col gap-3 bg-white/90 backdrop-blur-md border border-slate-200/80 shadow-sm rounded-2xl no-print">
+        {/* Tier 1: Search bar + View Switcher + Print + Add Result */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Search bar */}
+          <div className="relative flex-1 min-w-[200px]">
+            <AppIcon name="Search" size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={searchQuery}
               onChange={(e) => {
-                setSearchQuery(e.target.value);
-                updateQuery({ search: e.target.value });
+                const val = e.target.value;
+                setSearchQuery(val);
+                updateQuery({ search: val });
               }}
-              placeholder="Search student or exam…"
-              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-xs font-medium text-slate-700 outline-none transition-all focus:border-blue-400 focus:ring-4 focus:ring-blue-600/5 placeholder:text-slate-400"
+              placeholder="Search student, exam, admission no or class…"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white/90 pl-10 pr-9 text-xs font-medium text-slate-700 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-600/10 placeholder:text-slate-400"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  updateQuery({ search: "" });
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full transition-colors"
+                title="Clear search"
+              >
+                <AppIcon name="X" size={14} />
+              </button>
+            )}
           </div>
 
-          {/* Class filter */}
-          <select
-            value={classFilter}
-            onChange={(e) => {
-              const val = e.target.value;
-              setClassFilter(val);
-              setExamFilter("all");
-              setStudentFilter("all");
-              setSubjectFilter("all");
-              updateQuery({ class_id: val, exam_id: "all", student_id: "all", subject_id: "all" });
-            }}
-            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 outline-none cursor-pointer transition-all hover:border-slate-300 focus:border-blue-400"
-          >
-            <option value="all">All Classes</option>
-            {((classState.data as any)?.data || []).map((c: any) => (
-              <option key={c._id} value={c._id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          {/* Action buttons: Print, View toggle, Add Result */}
+          <div className="flex items-center gap-2 justify-end flex-wrap sm:flex-nowrap">
+            {/* Print / Export */}
+            <button
+              type="button"
+              onClick={() => {
+                exportExamMarksheet(filteredRows, { schoolName: brandedSchoolName, logoUrl });
+                showToast("Generating printable report…", "info");
+              }}
+              className="h-10 px-3.5 rounded-xl border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-all flex items-center gap-1.5 shadow-xs shrink-0 cursor-pointer"
+              title="Print report"
+            >
+              <AppIcon name="Printer" size={15} />
+              <span className="hidden sm:inline">Print</span>
+            </button>
 
-          {/* Exam filter */}
-          <select
-            value={examFilter}
-            onChange={(e) => {
-              const val = e.target.value;
-              setExamFilter(val);
-              updateQuery({ exam_id: val });
-            }}
-            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 outline-none cursor-pointer transition-all hover:border-slate-300 focus:border-blue-400"
-            disabled={classFilter === "all"}
-          >
-            <option value="all">All Exams / Terms</option>
-            {(examListState.data || []).map((e: any) => (
-              <option key={e._id} value={e._id}>
-                {e.title}
-              </option>
-            ))}
-          </select>
+            <div className="hidden sm:block h-6 w-px bg-slate-200 shrink-0" />
 
-          {/* Student filter */}
-          <select
-            value={studentFilter}
-            onChange={(e) => {
-              const val = e.target.value;
-              setStudentFilter(val);
-              updateQuery({ student_id: val });
-            }}
-            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 outline-none cursor-pointer transition-all hover:border-slate-300 focus:border-blue-400"
-          >
-            <option value="all">All Students</option>
-            {studentOptions
-              .filter((s) => classFilter === "all" || s.class_id === classFilter)
-              .map((s) => (
+            {/* View mode toggle */}
+            <div className="flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200/60 shrink-0 gap-0.5">
+              {([
+                { key: "list", icon: "List", label: "List" },
+                { key: "grid", icon: "LayoutGrid", label: "Grid" },
+                { key: "sheet", icon: "Grid", label: "Sheet" },
+              ] as const).map((vm) => (
+                <button
+                  key={vm.key}
+                  type="button"
+                  onClick={() => setViewMode(vm.key)}
+                  title={`${vm.label} view`}
+                  className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-bold transition-all cursor-pointer ${
+                    viewMode === vm.key
+                      ? "bg-white text-blue-600 shadow-sm font-black"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <AppIcon name={vm.icon} size={14} />
+                  <span>{vm.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="hidden sm:block h-6 w-px bg-slate-200 shrink-0" />
+
+            {/* Add Result */}
+            <button
+              type="button"
+              onClick={() => setIsAdding(!isAdding)}
+              className={`inline-flex h-10 items-center gap-2 px-4 text-[11px] font-bold transition-all rounded-xl shadow-md active:scale-95 shrink-0 cursor-pointer ${
+                isAdding
+                  ? "bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/10"
+                  : "bg-blue-600 text-white shadow-blue-600/25 hover:bg-blue-700"
+              }`}
+            >
+              <AppIcon name={isAdding ? "X" : "Plus"} size={16} />
+              <span>{isAdding ? "Cancel" : "Add Result"}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="h-px w-full bg-slate-100" />
+
+        {/* Tier 2: Filters Row + Records Count */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 flex-1">
+            <div className="flex items-center gap-1.5 text-slate-500 text-xs font-semibold shrink-0 mr-1">
+              <AppIcon name="SlidersHorizontal" size={13} className="text-slate-500" />
+              <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-500">Filters:</span>
+            </div>
+
+            {/* Class filter */}
+            <select
+              value={classFilter}
+              onChange={(e) => {
+                const val = e.target.value;
+                setClassFilter(val);
+                setExamFilter("all");
+                setStudentFilter("all");
+                setSubjectFilter("all");
+                updateQuery({ class_id: val, exam_id: "all", student_id: "all", subject_id: "all" });
+              }}
+              className="h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none cursor-pointer transition-all hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+            >
+              <option value="all">All Classes</option>
+              {((classState.data as any)?.data || []).map((c: any) => (
+                <option key={c._id} value={c._id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+
+            {/* Exam filter */}
+            <select
+              value={examFilter}
+              onChange={(e) => {
+                const val = e.target.value;
+                setExamFilter(val);
+                updateQuery({ exam_id: val });
+              }}
+              className="h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none cursor-pointer transition-all hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
+              disabled={classFilter === "all"}
+              title={classFilter === "all" ? "Select a class first to filter by exam" : undefined}
+            >
+              <option value="all">All Exams / Terms</option>
+              {(examListState.data || []).map((e: any) => (
+                <option key={e._id} value={e._id}>
+                  {e.title}
+                </option>
+              ))}
+            </select>
+
+            {/* Student filter */}
+            <select
+              value={studentFilter}
+              onChange={(e) => {
+                const val = e.target.value;
+                setStudentFilter(val);
+                updateQuery({ student_id: val });
+              }}
+              className="h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none cursor-pointer transition-all hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+            >
+              <option value="all">All Students</option>
+              {studentOptions
+                .filter((s) => classFilter === "all" || s.class_id === classFilter)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+            </select>
+
+            {/* Subject filter */}
+            <select
+              value={subjectFilter}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSubjectFilter(val);
+                updateQuery({ subject_id: val });
+              }}
+              className="h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none cursor-pointer transition-all hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+            >
+              <option value="all">All Subjects</option>
+              {subjectOptions.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.label}
                 </option>
               ))}
-          </select>
+            </select>
 
-          {/* Subject filter */}
-          <select
-            value={subjectFilter}
-            onChange={(e) => {
-              const val = e.target.value;
-              setSubjectFilter(val);
-              updateQuery({ subject_id: val });
-            }}
-            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 outline-none cursor-pointer transition-all hover:border-slate-300 focus:border-blue-400"
-          >
-            <option value="all">All Subjects</option>
-            {subjectOptions.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+            {/* Date filter */}
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => {
+                const val = e.target.value;
+                setDateFilter(val);
+                updateQuery({ date: val });
+              }}
+              className="h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none cursor-pointer transition-all hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+            />
 
-          {/* Date filter */}
-          <input
-            type="date"
-            value={dateFilter}
-            onChange={(e) => {
-              const val = e.target.value;
-              setDateFilter(val);
-              updateQuery({ date: val });
-            }}
-            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600 outline-none cursor-pointer transition-all hover:border-slate-300 focus:border-blue-400"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Print / Export */}
-          <button
-            onClick={() => {
-              exportExamMarksheet(filteredRows, { schoolName: brandedSchoolName, logoUrl });
-              showToast("Generating printable report…", "info");
-            }}
-            className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-blue-600 hover:border-blue-200 transition-all flex items-center gap-2 no-print"
-          >
-            <AppIcon name="Printer" size={16} />
-            Print
-          </button>
-
-          <div className="h-6 w-px bg-slate-200 no-print" />
-
-          {/* View mode toggle */}
-          <div className="flex items-center rounded-lg bg-slate-100 p-1 shadow-inner no-print gap-0.5">
-            {([
-              { key: "list", icon: "List", label: "List" },
-              { key: "grid", icon: "LayoutGrid", label: "Grid" },
-              { key: "sheet", icon: "Grid", label: "Sheet" },
-            ] as const).map((vm) => (
+            {/* Reset Filters button */}
+            {hasActiveFilters && (
               <button
-                key={vm.key}
-                onClick={() => setViewMode(vm.key)}
-                title={vm.label}
-                className={`flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[10px] font-bold transition-all ${
-                  viewMode === vm.key ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                }`}
+                type="button"
+                onClick={clearAllFilters}
+                className="h-8.5 px-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
               >
-                <AppIcon name={vm.icon} size={14} />
-                <span className="hidden sm:inline">{vm.label}</span>
+                <AppIcon name="X" size={13} />
+                Reset Filters
               </button>
-            ))}
+            )}
           </div>
 
-          <div className="h-6 w-px bg-slate-200 no-print" />
-          <span className="text-[10px] font-bold text-slate-900 px-2 whitespace-nowrap no-print">
-            {filteredRows.length} <span className="text-slate-400">Records</span>
-          </span>
-          <div className="h-6 w-px bg-slate-200 no-print" />
-
-          {/* Add Result */}
-          <button
-            onClick={() => setIsAdding(!isAdding)}
-            className={`inline-flex h-9 items-center gap-2 px-5 text-[11px] font-bold transition-all rounded-xl shadow-lg active:scale-95 no-print ${
-              isAdding ? "bg-slate-900 text-white" : "bg-blue-600 text-white shadow-blue-600/20 hover:bg-blue-700"
-            }`}
-          >
-            <AppIcon name={isAdding ? "close" : "add_box"} size={18} />
-            {isAdding ? "Cancel" : "Add Result"}
-          </button>
+          {/* Records Count Badge */}
+          <div className="flex items-center gap-2 shrink-0 ml-auto">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 text-xs font-bold text-slate-700 border border-slate-200/60">
+              <span className="text-blue-600 font-extrabold">{filteredRows.length}</span>
+              <span className="text-slate-500">{filteredRows.length === 1 ? "Record" : "Records"}</span>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -915,11 +995,39 @@ export function ResultPage() {
         {state.status === "loading" || state.status === "idle" ? (
           <TableSkeleton />
         ) : filteredRows.length === 0 ? (
-          <DataState
-            variant="empty"
-            title="No performance data found"
-            message="Start recording student assessment results to see analytics."
-          />
+          hasActiveFilters && (state.data || []).length > 0 ? (
+            <DataState
+              variant="empty"
+              title="No matching results found"
+              message="No assessment results match your current search or selected filters. Try clearing filters to view all records."
+              action={
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  className="inline-flex h-9 items-center gap-2 px-4 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 rounded-xl transition-all border border-slate-200 shadow-xs cursor-pointer active:scale-95"
+                >
+                  <AppIcon name="X" size={14} />
+                  Clear All Filters
+                </button>
+              }
+            />
+          ) : (
+            <DataState
+              variant="empty"
+              title="No performance data found"
+              message="Start recording student assessment results to see analytics."
+              action={
+                <button
+                  type="button"
+                  onClick={() => setIsAdding(true)}
+                  className="inline-flex h-9 items-center gap-2 px-4 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-md shadow-blue-600/25 active:scale-95 cursor-pointer"
+                >
+                  <AppIcon name="Plus" size={16} />
+                  Add First Result
+                </button>
+              }
+            />
+          )
         ) : viewMode === "sheet" ? (
           /* ── CLASS RESULT SHEET ── */
           <ClassResultSheet
