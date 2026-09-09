@@ -201,6 +201,13 @@ func (b *BrevoClient) SendOTP(ctx context.Context, toEmail, toName, otp string, 
 			"to", toEmail,
 			"response", string(respBody),
 		)
+		if !b.cfg.IsProduction {
+			slog.Warn("DEV EMAIL FALLBACK: Brevo rejected delivery in development environment; OTP logged for local testing",
+				"to", toEmail,
+				"otp", otp,
+			)
+			return nil
+		}
 		return fmt.Errorf("email delivery failed with status %d", resp.StatusCode)
 	}
 
@@ -328,6 +335,13 @@ func (b *BrevoClient) SendPasswordResetOTP(ctx context.Context, toEmail, toName,
 			"to", toEmail,
 			"response", string(respBody),
 		)
+		if !b.cfg.IsProduction {
+			slog.Warn("DEV EMAIL FALLBACK: Brevo rejected delivery in development environment; OTP logged for local testing",
+				"to", toEmail,
+				"otp", otp,
+			)
+			return nil
+		}
 		return fmt.Errorf("email delivery failed with status %d", resp.StatusCode)
 	}
 

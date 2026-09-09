@@ -422,7 +422,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	var updatedSchool *store.School
 	if targetUser.Role == "admin" || targetUser.Role == "super_admin" {
 		for _, s := range h.Store.Schools {
-			if s.ID == targetUser.SchoolID || s.OwnerUserID == targetUser.ID || strings.EqualFold(s.OwnerEmail, targetUser.Email) {
+			if s.ID == targetUser.SchoolID || s.SchoolID == targetUser.SchoolID || s.OwnerUserID == targetUser.ID || strings.EqualFold(s.OwnerEmail, targetUser.Email) {
 				s.ReferralAdminPassword = newPassword
 				s.UpdatedAt = now.UTC()
 				updatedSchool = s
@@ -450,7 +450,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 			defer cancel()
 			_, _ = h.Pool.Exec(ctx, "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", hash, uid)
 			if schoolID != "" && plainPwd != "" {
-				_, _ = h.Pool.Exec(ctx, "UPDATE schools SET referral_admin_password = $1, updated_at = NOW() WHERE id = $2", plainPwd, schoolID)
+				_, _ = h.Pool.Exec(ctx, "UPDATE schools SET referral_admin_password = $1, updated_at = NOW() WHERE id = $2 OR school_id = $2", plainPwd, schoolID)
 			}
 		}(targetUser.ID, hashedPassword, targetUser.SchoolID, newPassword)
 	}
