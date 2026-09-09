@@ -494,6 +494,15 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 
+	refToken := strings.TrimSpace(firstNonEmpty(body.ReferralToken, body.Ref))
+	var referredByPublisherID string
+	if refToken != "" && h.Pool != nil {
+		pub, err := referral.GetPublisherByToken(r.Context(), h.Pool, refToken)
+		if err == nil && pub != nil && pub.Status == "active" {
+			referredByPublisherID = pub.ID
+		}
+	}
+
 	schoolID := "system"
 	if role == "teacher" || role == "student" {
 		h.Store.RLock()
@@ -518,6 +527,9 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			api.WriteJSON(w, http.StatusConflict, signupErr(err.Error()))
 			return
+		}
+		if referredByPublisherID != "" {
+			school.ReferredByPublisherID = referredByPublisherID
 		}
 		schoolID = school.SchoolID
 
@@ -546,6 +558,9 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 			h.Store.Lock()
 			school.Status = "active"
 			school.UpdatedAt = now
+			if referredByPublisherID != "" {
+				school.ReferredByPublisherID = referredByPublisherID
+			}
 			h.Store.Users = append(h.Store.Users, newUser)
 			trial := &store.Subscription{
 				ID:           store.NewID("sub"),
