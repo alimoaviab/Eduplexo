@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { apiRequest } from './lib/api'
 
 interface ReferredSchool {
   id: string
@@ -37,29 +38,24 @@ export default function App() {
 
   const loadDashboard = useCallback(async (authToken: string) => {
     setLoading(true)
-    try {
-      const res = await fetch('/api/publisher/dashboard', {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-      })
-      const data = await res.json()
-      if (res.ok && data.ok) {
-        setDashboard(data.data)
-      } else if (res.status === 401 || res.status === 403) {
-        // Token invalid or suspended
-        handleLogout()
-        if (data.message) {
-          setLoginError(data.message)
-        }
-      } else {
-        setLoginError(data.message || 'Failed to load partner dashboard')
+    const res = await apiRequest<DashboardData>('/api/publisher/dashboard', {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+      },
+    })
+
+    if (res.ok && res.data) {
+      setDashboard(res.data)
+    } else if (res.status === 401 || res.status === 403) {
+      // Token invalid or suspended
+      handleLogout()
+      if (res.message) {
+        setLoginError(res.message)
       }
-    } catch {
-      setLoginError('Network error connecting to partner server')
-    } finally {
-      setLoading(false)
+    } else {
+      setLoginError(res.message || 'Failed to load partner dashboard')
     }
+    setLoading(false)
   }, [])
 
   useEffect(() => {
@@ -73,31 +69,24 @@ export default function App() {
     setLoginError('')
     setIsLoggingIn(true)
 
-    try {
-      const res = await fetch('/api/publisher/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password,
-        }),
-      })
+    const res = await apiRequest<{ token: string }>('/api/publisher/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        password,
+      }),
+    })
 
-      const result = await res.json()
-      if (res.ok && result.ok && result.data?.token) {
-        const issuedToken = result.data.token
-        localStorage.setItem(TOKEN_KEY, issuedToken)
-        setToken(issuedToken)
-        setEmail('')
-        setPassword('')
-      } else {
-        setLoginError(result.message || 'Invalid email or password.')
-      }
-    } catch {
-      setLoginError('Unable to connect to login server. Please try again.')
-    } finally {
-      setIsLoggingIn(false)
+    if (res.ok && res.data?.token) {
+      const issuedToken = res.data.token
+      localStorage.setItem(TOKEN_KEY, issuedToken)
+      setToken(issuedToken)
+      setEmail('')
+      setPassword('')
+    } else {
+      setLoginError(res.message || 'Invalid email or password.')
     }
+    setIsLoggingIn(false)
   }
 
   const handleLogout = () => {
