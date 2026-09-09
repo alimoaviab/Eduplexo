@@ -669,6 +669,9 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		pending.Phone = body.Phone
 		pending.Role = role
 		pending.SchoolID = schoolID
+		if referredByPublisherID != "" {
+			pending.ReferredByPublisherID = referredByPublisherID
+		}
 		pending.PasswordHash = hash
 		pending.OTPHash = otpHash
 		pending.ExpiresAt = expiresAt
@@ -679,22 +682,23 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		pending.SendCountHour++
 	} else {
 		pending = &store.PendingSignup{
-			ID:            store.NewID("psign"),
-			Email:         email,
-			FullName:      fullName,
-			Phone:         body.Phone,
-			Role:          role,
-			SchoolID:      schoolID,
-			PasswordHash:  hash,
-			OTPHash:       otpHash,
-			CreatedAt:     now,
-			ExpiresAt:     expiresAt,
-			LastSentAt:    now,
-			Attempts:      0,
-			MaxAttempts:   h.Cfg.EmailOTPMaxVerifyAttempts,
-			SendCountHour: 1,
-			Status:        "pending",
-			IPAddress:     r.RemoteAddr,
+			ID:                    store.NewID("psign"),
+			Email:                 email,
+			FullName:              fullName,
+			Phone:                 body.Phone,
+			Role:                  role,
+			SchoolID:              schoolID,
+			ReferredByPublisherID: referredByPublisherID,
+			PasswordHash:          hash,
+			OTPHash:               otpHash,
+			CreatedAt:             now,
+			ExpiresAt:             expiresAt,
+			LastSentAt:            now,
+			Attempts:              0,
+			MaxAttempts:           h.Cfg.EmailOTPMaxVerifyAttempts,
+			SendCountHour:         1,
+			Status:                "pending",
+			IPAddress:             r.RemoteAddr,
 		}
 		h.Store.PendingSignups = append(h.Store.PendingSignups, pending)
 	}
