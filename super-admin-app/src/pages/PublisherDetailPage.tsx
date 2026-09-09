@@ -146,7 +146,7 @@ export function PublisherDetailPage() {
     return (
       <div className="p-8 max-w-7xl mx-auto min-h-screen flex flex-col items-center justify-center gap-3 text-slate-400">
         <div className="h-7 w-7 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-        <span className="text-sm font-medium">Loading publisher details...</span>
+        <span className="text-sm font-medium">Loading partner details...</span>
       </div>
     )
   }
@@ -157,13 +157,13 @@ export function PublisherDetailPage() {
         <div className="bg-slate-50 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-100">
           <AppIcon name="AlertCircle" className="h-8 w-8 text-slate-400" />
         </div>
-        <h2 className="text-xl font-bold text-slate-900 mb-2">Publisher Not Found</h2>
-        <p className="text-slate-500 text-sm mb-6">The requested publisher could not be loaded or was removed.</p>
+        <h2 className="text-xl font-bold text-slate-900 mb-2">Partner Not Found</h2>
+        <p className="text-slate-500 text-sm mb-6">The requested partner could not be loaded or was removed.</p>
         <Link
           to="/publishers"
           className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors"
         >
-          Back to Publishers
+          Back to Partners
         </Link>
       </div>
     )
@@ -180,7 +180,7 @@ export function PublisherDetailPage() {
           className="text-sm font-medium text-slate-500 hover:text-slate-900 inline-flex items-center gap-1.5 transition-colors"
         >
           <AppIcon name="ArrowLeft" className="h-4 w-4" />
-          Back to Publishers
+          Back to Partners
         </Link>
       </div>
 
