@@ -2055,7 +2055,6 @@ func (h *Handler) UpdateCredentials(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.Store.Lock()
-	defer h.Store.Unlock()
 
 	var adminUser *store.User
 	for _, u := range h.Store.Users {
@@ -2074,12 +2073,14 @@ func (h *Handler) UpdateCredentials(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if adminUser == nil {
+		h.Store.Unlock()
 		api.WriteResult(w, api.Fail("NOT_FOUND", "Super admin user not found.", 404, nil))
 		return
 	}
 
 	// Verify current password
 	if !auth.VerifyPassword(currentPassword, adminUser.PasswordHash) {
+		h.Store.Unlock()
 		api.WriteResult(w, api.Fail("UNAUTHORIZED", "Current password is incorrect.", 401, nil))
 		return
 	}
@@ -2089,12 +2090,14 @@ func (h *Handler) UpdateCredentials(w http.ResponseWriter, r *http.Request) {
 	// Process email change
 	if newEmail != "" && !strings.EqualFold(newEmail, adminUser.Email) {
 		if !strings.Contains(newEmail, "@") || len(newEmail) < 5 {
+			h.Store.Unlock()
 			api.WriteResult(w, api.Fail("VALIDATION_ERROR", "Please provide a valid email address.", 400, nil))
 			return
 		}
 		// Ensure uniqueness across all other users
 		for _, u := range h.Store.Users {
 			if u.ID != adminUser.ID && strings.EqualFold(u.Email, newEmail) {
+				h.Store.Unlock()
 				api.WriteResult(w, api.Fail("CONFLICT", "This email address is already in use by another account.", 409, nil))
 				return
 			}
@@ -2106,11 +2109,13 @@ func (h *Handler) UpdateCredentials(w http.ResponseWriter, r *http.Request) {
 	// Process password change
 	if newPassword != "" {
 		if len(newPassword) < 8 {
+			h.Store.Unlock()
 			api.WriteResult(w, api.Fail("VALIDATION_ERROR", "New password must be at least 8 characters long.", 400, nil))
 			return
 		}
 		hash, err := auth.HashPassword(newPassword)
 		if err != nil {
+			h.Store.Unlock()
 			api.WriteResult(w, api.Fail("INTERNAL_ERROR", "Failed to encrypt new password.", 500, nil))
 			return
 		}
@@ -2119,6 +2124,7 @@ func (h *Handler) UpdateCredentials(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(updatedFields) == 0 {
+		h.Store.Unlock()
 		api.WriteResult(w, api.Ok(map[string]any{
 			"success": true,
 			"message": "No changes were requested.",
@@ -2130,6 +2136,8 @@ func (h *Handler) UpdateCredentials(w http.ResponseWriter, r *http.Request) {
 
 	adminUser.UpdatedAt = time.Now()
 	h.Persist("users", adminUser)
+	h.Store.Unlock()
+
 	h.Store.RebuildIndexes()
 
 	// Asynchronously persist to Postgres if pool is active
