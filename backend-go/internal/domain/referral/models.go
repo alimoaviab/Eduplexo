@@ -4,40 +4,42 @@ import "time"
 
 // Publisher represents a partner who refers schools to EduPlexo.
 type Publisher struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            string     `json:"id"`
+	Name          string     `json:"name"`
+	Email         string     `json:"email"`
+	PasswordHash  string     `json:"-"`
+	ReferralToken string     `json:"referral_token"`
+	ReferralURL   string     `json:"referral_url,omitempty"`
+	Status        string     `json:"status"` // active, suspended, deleted
+	ReferredCount int        `json:"referred_schools_count"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
 }
 
-// Token represents a generated, one-time-use referral link.
-type Token struct {
-	ID                   string     `json:"id"`
-	PublisherID          string     `json:"publisher_id"`
-	TokenHash            string     `json:"-"`
-	Status               string     `json:"status"` // UNUSED, USED, REVOKED
-	PlanID               string     `json:"plan_id"`
-	PlanNameSnapshot     string     `json:"plan_name_snapshot"`
-	MonthlyPriceSnapshot float64    `json:"monthly_price_snapshot"`
-	Currency             string     `json:"currency"`
-	BillingPeriod        string     `json:"billing_period"`
-	ExpiresAt            *time.Time `json:"expires_at,omitempty"`
-	UsedAt               *time.Time `json:"used_at,omitempty"`
-	UsedBySchoolID       *string    `json:"used_by_school_id,omitempty"`
-	CreatedAt            time.Time  `json:"created_at"`
-	RevokedAt            *time.Time `json:"revoked_at,omitempty"`
+// ReferredSchool represents a school referred by a publisher.
+type ReferredSchool struct {
+	ID           string    `json:"id"`
+	SchoolID     string    `json:"school_id"`
+	Name         string    `json:"name"`
+	Code         string    `json:"code"`
+	ContactEmail string    `json:"contact_email"`
+	ContactPhone string    `json:"contact_phone"`
+	Status       string    `json:"status"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
-// ReferralRecord logs the successful consumption of a token.
-type ReferralRecord struct {
-	ID                   string     `json:"id"`
-	PublisherID          string     `json:"publisher_id"`
-	ReferralTokenID      string     `json:"referral_token_id"`
-	SchoolID             string     `json:"school_id"`
-	PlanID               string     `json:"plan_id"`
-	MonthlyPriceSnapshot float64    `json:"monthly_price_snapshot"`
-	CommissionStatus     string     `json:"commission_status"`
-	CommissionAmount     *float64   `json:"commission_amount,omitempty"`
-	CreatedAt            time.Time  `json:"created_at"`
+// CreatePublisherRequest defines payload for creating a new publisher by super admin.
+type CreatePublisherRequest struct {
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Status   string `json:"status,omitempty"`
+}
+
+// UpdatePublisherRequest defines payload for updating a publisher.
+type UpdatePublisherRequest struct {
+	Name     string `json:"name,omitempty"`
+	Email    string `json:"email,omitempty"`
+	Password string `json:"password,omitempty"`
 }

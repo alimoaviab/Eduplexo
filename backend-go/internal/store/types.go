@@ -27,9 +27,10 @@ type School struct {
 	ApprovedAt      *time.Time `json:"approved_at,omitempty"`
 	ApprovedBy      string     `json:"approved_by,omitempty"`
 	RejectionReason string     `json:"rejection_reason,omitempty"`
-	PackageID       string     `json:"package_id,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	PackageID              string     `json:"package_id,omitempty"`
+	ReferredByPublisherID  string     `json:"referred_by_publisher_id,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
 }
 
 type UserProfile struct {
@@ -55,24 +56,25 @@ type User struct {
 }
 
 type PendingSignup struct {
-	ID            string     `json:"id"`
-	Email         string     `json:"email"`
-	FullName      string     `json:"full_name"`
-	Phone         string     `json:"phone,omitempty"`
-	Role          string     `json:"role"`
-	SchoolID      string     `json:"school_id,omitempty"`
-	PasswordHash  string     `json:"-"`
-	OTPHash       string     `json:"-"`
-	CreatedAt     time.Time  `json:"created_at"`
-	ExpiresAt     time.Time  `json:"expires_at"`
-	LastSentAt    time.Time  `json:"last_sent_at"`
-	Attempts      int        `json:"attempts"`
-	MaxAttempts   int        `json:"max_attempts"`
-	SendCountHour int        `json:"send_count_hour"`
-	Status        string     `json:"status"` // pending, verified, expired, consumed
-	VerifiedAt    *time.Time `json:"verified_at,omitempty"`
-	ConsumedAt    *time.Time `json:"consumed_at,omitempty"`
-	IPAddress     string     `json:"ip_address,omitempty"`
+	ID                    string     `json:"id"`
+	Email                 string     `json:"email"`
+	FullName              string     `json:"full_name"`
+	Phone                 string     `json:"phone,omitempty"`
+	Role                  string     `json:"role"`
+	SchoolID              string     `json:"school_id,omitempty"`
+	ReferredByPublisherID string     `json:"referred_by_publisher_id,omitempty"`
+	PasswordHash          string     `json:"-"`
+	OTPHash               string     `json:"-"`
+	CreatedAt             time.Time  `json:"created_at"`
+	ExpiresAt             time.Time  `json:"expires_at"`
+	LastSentAt            time.Time  `json:"last_sent_at"`
+	Attempts              int        `json:"attempts"`
+	MaxAttempts           int        `json:"max_attempts"`
+	SendCountHour         int        `json:"send_count_hour"`
+	Status                string     `json:"status"` // pending, verified, expired, consumed
+	VerifiedAt            *time.Time `json:"verified_at,omitempty"`
+	ConsumedAt            *time.Time `json:"consumed_at,omitempty"`
+	IPAddress             string     `json:"ip_address,omitempty"`
 }
 
 type AcademicYear struct {
