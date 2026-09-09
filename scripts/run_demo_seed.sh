@@ -37,18 +37,53 @@ if command -v docker >/dev/null 2>&1 && [ -f "${ROOT_DIR}/docker-compose.prod.ym
     echo "✓ Found running production PostgreSQL container."
     echo "→ Applying ${SQL_FILE} to database..."
     
-    # Load .env.prod if present for credentials
-    if [ -f "${ROOT_DIR}/.env.prod" ]; then
+    # Load environment from .env and .env.prod if present
+    if [ -f "${ROOT_DIR}/.env" ]; then
+      set -a
+      # shellcheck disable=SC1091
+      source "${ROOT_DIR}/.env"
+      set +a
+    elif [ -f "${ROOT_DIR}/.env.prod" ]; then
       set -a
       # shellcheck disable=SC1091
       source "${ROOT_DIR}/.env.prod"
       set +a
     fi
-    
-    PG_USER="${POSTGRES_USER:-school_user}"
-    PG_DB="${POSTGRES_DB:-school_db}"
-    
-    docker compose -f "${ROOT_DIR}/docker-compose.prod.yml" exec -T postgres psql -U "${PG_USER}" -d "${PG_DB}" < "${SQL_FILE}"
+
+    # Detect variables directly from the running container
+    CONTAINER_USER=$(docker compose -f "${ROOT_DIR}/docker-compose.prod.yml" exec -T postgres printenv POSTGRES_USER 2>/dev/null | tr -d '\r\n' || true)
+    CONTAINER_DB=$(docker compose -f "${ROOT_DIR}/docker-compose.prod.yml" exec -T postgres printenv POSTGRES_DB 2>/dev/null | tr -d '\r\n' || true)
+
+    CANDIDATE_USERS=()
+    if [ -n "${CONTAINER_USER}" ]; then CANDIDATE_USERS+=("${CONTAINER_USER}"); fi
+    if [ -n "${POSTGRES_USER:-}" ]; then CANDIDATE_USERS+=("${POSTGRES_USER}"); fi
+    CANDIDATE_USERS+=("eduplexo_app" "postgres" "school_user")
+
+    CANDIDATE_DBS=()
+    if [ -n "${CONTAINER_DB}" ]; then CANDIDATE_DBS+=("${CONTAINER_DB}"); fi
+    if [ -n "${POSTGRES_DB:-}" ]; then CANDIDATE_DBS+=("${POSTGRES_DB}"); fi
+    CANDIDATE_DBS+=("school_db" "eduplexo_prod" "postgres")
+
+    VALID_USER=""
+    VALID_DB=""
+
+    for u in "${CANDIDATE_USERS[@]}"; do
+      for d in "${CANDIDATE_DBS[@]}"; do
+        if docker compose -f "${ROOT_DIR}/docker-compose.prod.yml" exec -T postgres psql -U "$u" -d "$d" -c '\q' >/dev/null 2>&1; then
+          VALID_USER="$u"
+          VALID_DB="$d"
+          break 2
+        fi
+      done
+    done
+
+    if [ -z "${VALID_USER}" ]; then
+      VALID_USER="${CONTAINER_USER:-${POSTGRES_USER:-eduplexo_app}}"
+      VALID_DB="${CONTAINER_DB:-${POSTGRES_DB:-school_db}}"
+    fi
+
+    echo "→ Connected as user '${VALID_USER}' on database '${VALID_DB}'"
+    docker compose -f "${ROOT_DIR}/docker-compose.prod.yml" exec -T postgres psql -U "${VALID_USER}" -d "${VALID_DB}" < "${SQL_FILE}"
     echo "✓ Database seeded successfully!"
     
     echo "→ Refreshing backend-go cache to hydrate in-memory store..."

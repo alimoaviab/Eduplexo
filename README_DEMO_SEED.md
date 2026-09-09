@@ -6,18 +6,23 @@ This document details the turnkey demonstration environment for **Eduplexo**. It
 
 ## ⚡ Quickstart: Run on Contabo VPS
 
-To seed or reset the demo school on your production VPS, run this single command:
+On your VPS (e.g. at `/opt/eduplexo`), execute:
 
 ```bash
-cd /root/eduplexo   # or your VPS repo directory
+cd /opt/eduplexo
 bash scripts/run_demo_seed.sh
 ```
 
 ### Direct Docker Alternative (Single Command)
-If you prefer running the raw Docker command directly:
+If you prefer running directly:
 
 ```bash
-docker compose -f docker-compose.prod.yml exec -T postgres psql -U school_user -d school_db < scripts/seed_demo_school.sql && docker compose -f docker-compose.prod.yml restart backend-go
+docker compose -f docker-compose.prod.yml exec -T postgres psql -U "$(docker compose -f docker-compose.prod.yml exec -T postgres printenv POSTGRES_USER | tr -d '\r\n')" -d "$(docker compose -f docker-compose.prod.yml exec -T postgres printenv POSTGRES_DB | tr -d '\r\n')" < scripts/seed_demo_school.sql && docker compose -f docker-compose.prod.yml restart backend-go
+```
+
+Or using the standard `eduplexo_app` / `postgres` role:
+```bash
+docker compose -f docker-compose.prod.yml exec -T postgres psql -U eduplexo_app -d school_db < scripts/seed_demo_school.sql && docker compose -f docker-compose.prod.yml restart backend-go
 ```
 
 > [!NOTE]
