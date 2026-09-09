@@ -17,6 +17,8 @@ bash scripts/run_demo_seed.sh
 If you prefer running directly:
 
 ```bash
+
+
 docker compose -f docker-compose.prod.yml exec -T postgres psql -U "$(docker compose -f docker-compose.prod.yml exec -T postgres printenv POSTGRES_USER | tr -d '\r\n')" -d "$(docker compose -f docker-compose.prod.yml exec -T postgres printenv POSTGRES_DB | tr -d '\r\n')" < scripts/seed_demo_school.sql && docker compose -f docker-compose.prod.yml restart backend-go
 ```
 
