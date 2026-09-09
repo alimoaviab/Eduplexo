@@ -13,6 +13,7 @@ const navItems = [
 	{ label: 'Custom Plans', href: '/custom-plans', icon: 'FileText' },
 	{ label: 'Users', href: '/users', icon: 'Users' },
 	{ label: 'Settings', href: '/settings', icon: 'Settings' },
+	{ label: 'Change Credentials', href: '/security', icon: 'KeyRound' },
 ]
 
 interface SAUser {
