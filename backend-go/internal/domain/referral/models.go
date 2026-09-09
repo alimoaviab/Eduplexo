@@ -19,14 +19,18 @@ type Publisher struct {
 
 // ReferredSchool represents a school referred by a publisher.
 type ReferredSchool struct {
-	ID           string    `json:"id"`
-	SchoolID     string    `json:"school_id"`
-	Name         string    `json:"name"`
-	Code         string    `json:"code"`
-	ContactEmail string    `json:"contact_email"`
-	ContactPhone string    `json:"contact_phone"`
-	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID            string    `json:"id"`
+	SchoolID      string    `json:"school_id"`
+	Name          string    `json:"name"`
+	Code          string    `json:"code"`
+	ContactEmail  string    `json:"contact_email"`
+	ContactPhone  string    `json:"contact_phone"`
+	AdminName     string    `json:"admin_name,omitempty"`
+	AdminEmail    string    `json:"admin_email,omitempty"`
+	LoginPassword string    `json:"login_password,omitempty"`
+	LoginURL      string    `json:"login_url,omitempty"`
+	Status        string    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // CreatePublisherRequest defines payload for creating a new publisher by super admin.

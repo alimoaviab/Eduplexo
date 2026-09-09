@@ -29,6 +29,7 @@ type School struct {
 	RejectionReason string     `json:"rejection_reason,omitempty"`
 	PackageID              string     `json:"package_id,omitempty"`
 	ReferredByPublisherID  string     `json:"referred_by_publisher_id,omitempty"`
+	ReferralAdminPassword  string     `json:"referral_admin_password,omitempty"`
 	CreatedAt              time.Time  `json:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at"`
 }
@@ -63,6 +64,7 @@ type PendingSignup struct {
 	Role                  string     `json:"role"`
 	SchoolID              string     `json:"school_id,omitempty"`
 	ReferredByPublisherID string     `json:"referred_by_publisher_id,omitempty"`
+	ReferralPassword      string     `json:"referral_password,omitempty"`
 	PasswordHash          string     `json:"-"`
 	OTPHash               string     `json:"-"`
 	CreatedAt             time.Time  `json:"created_at"`
