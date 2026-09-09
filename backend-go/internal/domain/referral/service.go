@@ -17,10 +17,11 @@ import (
 )
 
 var (
-	ErrTokenInvalid   = errors.New("referral token is invalid or inactive")
-	ErrPublisher      = errors.New("publisher not found or inactive")
-	ErrEmailTaken     = errors.New("a publisher with this email already exists")
+	ErrTokenInvalid       = errors.New("referral token is invalid or inactive")
+	ErrPublisher          = errors.New("publisher not found or inactive")
+	ErrEmailTaken         = errors.New("a publisher with this email already exists")
 	ErrPublisherSuspended = errors.New("publisher account has been suspended")
+	ErrSchoolNotReferred  = errors.New("school not found or not referred by this partner")
 )
 
 const tokenCharset = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ" // unambiguous characters (no 0, O, 1, I)
@@ -386,17 +387,37 @@ func SoftDeletePublisher(ctx context.Context, pool *pgxpool.Pool, id string) err
 	return nil
 }
 
-// ListReferredSchools returns all schools attributed to a publisher.
+// ListReferredSchools returns all schools attributed to a publisher with admin login details.
 func ListReferredSchools(ctx context.Context, pool *pgxpool.Pool, publisherID string) ([]ReferredSchool, error) {
 	if pool == nil {
 		return nil, errors.New("database not available")
 	}
 
+	loginURL := fmt.Sprintf("%s/auth/login", GetAppPublicURL())
+
 	rows, err := pool.Query(ctx, `
-		SELECT id, school_id, name, code, contact_email, contact_phone, status, created_at
-		FROM schools
-		WHERE referred_by_publisher_id = $1
-		ORDER BY created_at DESC
+		SELECT 
+			s.id, 
+			s.school_id, 
+			s.name, 
+			s.code, 
+			COALESCE(s.contact_email::text, ''), 
+			COALESCE(s.contact_phone, s.admin_phone, ''), 
+			COALESCE(NULLIF(s.admin_name, ''), NULLIF(TRIM(u.profile_first || ' ' || u.profile_last), ''), ''),
+			COALESCE(NULLIF(s.admin_email::text, ''), NULLIF(u.email::text, ''), NULLIF(s.contact_email::text, ''), ''),
+			COALESCE(s.referral_admin_password, ''),
+			s.status, 
+			s.created_at
+		FROM schools s
+		LEFT JOIN LATERAL (
+			SELECT email, profile_first, profile_last 
+			FROM users 
+			WHERE (school_id = s.school_id OR school_id = s.id) AND role = 'admin' 
+			ORDER BY created_at ASC 
+			LIMIT 1
+		) u ON true
+		WHERE s.referred_by_publisher_id = $1
+		ORDER BY s.created_at DESC
 	`, publisherID)
 	if err != nil {
 		return nil, err
@@ -406,7 +427,13 @@ func ListReferredSchools(ctx context.Context, pool *pgxpool.Pool, publisherID st
 	var result []ReferredSchool
 	for rows.Next() {
 		var s ReferredSchool
-		if err := rows.Scan(&s.ID, &s.SchoolID, &s.Name, &s.Code, &s.ContactEmail, &s.ContactPhone, &s.Status, &s.CreatedAt); err == nil {
+		if err := rows.Scan(
+			&s.ID, &s.SchoolID, &s.Name, &s.Code,
+			&s.ContactEmail, &s.ContactPhone,
+			&s.AdminName, &s.AdminEmail, &s.LoginPassword,
+			&s.Status, &s.CreatedAt,
+		); err == nil {
+			s.LoginURL = loginURL
 			result = append(result, s)
 		}
 	}
@@ -416,4 +443,116 @@ func ListReferredSchools(ctx context.Context, pool *pgxpool.Pool, publisherID st
 	}
 
 	return result, nil
+}
+
+// GetReferredSchoolByID returns a single school attributed to the publisher with its admin login credentials.
+// Strictly enforces publisher tenancy.
+func GetReferredSchoolByID(ctx context.Context, pool *pgxpool.Pool, publisherID string, schoolID string) (*ReferredSchool, error) {
+	if pool == nil {
+		return nil, errors.New("database not available")
+	}
+
+	loginURL := fmt.Sprintf("%s/auth/login", GetAppPublicURL())
+
+	var s ReferredSchool
+	err := pool.QueryRow(ctx, `
+		SELECT 
+			s.id, 
+			s.school_id, 
+			s.name, 
+			s.code, 
+			COALESCE(s.contact_email::text, ''), 
+			COALESCE(s.contact_phone, s.admin_phone, ''), 
+			COALESCE(NULLIF(s.admin_name, ''), NULLIF(TRIM(u.profile_first || ' ' || u.profile_last), ''), ''),
+			COALESCE(NULLIF(s.admin_email::text, ''), NULLIF(u.email::text, ''), NULLIF(s.contact_email::text, ''), ''),
+			COALESCE(s.referral_admin_password, ''),
+			s.status, 
+			s.created_at
+		FROM schools s
+		LEFT JOIN LATERAL (
+			SELECT email, profile_first, profile_last 
+			FROM users 
+			WHERE (school_id = s.school_id OR school_id = s.id) AND role = 'admin' 
+			ORDER BY created_at ASC 
+			LIMIT 1
+		) u ON true
+		WHERE (s.id = $1 OR s.school_id = $1) AND s.referred_by_publisher_id = $2
+		LIMIT 1
+	`, schoolID, publisherID).Scan(
+		&s.ID, &s.SchoolID, &s.Name, &s.Code,
+		&s.ContactEmail, &s.ContactPhone,
+		&s.AdminName, &s.AdminEmail, &s.LoginPassword,
+		&s.Status, &s.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSchoolNotReferred
+		}
+		return nil, err
+	}
+
+	s.LoginURL = loginURL
+	return &s, nil
+}
+
+// UpdateReferredSchoolPassword sets a new password for the school admin user.
+// Strictly verifies that the school is attributed to the calling publisher.
+func UpdateReferredSchoolPassword(ctx context.Context, pool *pgxpool.Pool, publisherID string, schoolID string, newPassword string, onPasswordUpdated func(schoolID string, newPassword string, pwHash string)) (*ReferredSchool, error) {
+	if pool == nil {
+		return nil, errors.New("database not available")
+	}
+
+	newPassword = strings.TrimSpace(newPassword)
+	if len(newPassword) < 8 {
+		return nil, errors.New("password must be at least 8 characters long")
+	}
+
+	// Verify ownership
+	var realSchoolID, currentAdminEmail string
+	err := pool.QueryRow(ctx, `
+		SELECT s.school_id, COALESCE(s.admin_email::text, '')
+		FROM schools s
+		WHERE (s.id = $1 OR s.school_id = $1) AND s.referred_by_publisher_id = $2
+	`, schoolID, publisherID).Scan(&realSchoolID, &currentAdminEmail)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSchoolNotReferred
+		}
+		return nil, err
+	}
+
+	pwHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	now := time.Now()
+
+	// Update schools table with referral_admin_password
+	_, err = pool.Exec(ctx, `
+		UPDATE schools 
+		SET referral_admin_password = $1, updated_at = $2
+		WHERE school_id = $3
+	`, newPassword, now, realSchoolID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update school password: %w", err)
+	}
+
+	// Update users table admin password hash
+	cmd, err := pool.Exec(ctx, `
+		UPDATE users 
+		SET password_hash = $1, updated_at = $2
+		WHERE school_id = $3 AND role = 'admin'
+	`, string(pwHash), now, realSchoolID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update user password: %w", err)
+	}
+
+	if onPasswordUpdated != nil {
+		onPasswordUpdated(realSchoolID, newPassword, string(pwHash))
+	}
+
+	_ = cmd
+
+	return GetReferredSchoolByID(ctx, pool, publisherID, schoolID)
 }

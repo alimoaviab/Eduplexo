@@ -110,6 +110,7 @@ func (h *Handler) ReferralSignup(w http.ResponseWriter, r *http.Request) {
 		Status:                "active",
 		ApprovalStatus:        "approved",
 		ReferredByPublisherID: publisherID,
+		ReferralAdminPassword: password,
 		CreatedAt:             now,
 		UpdatedAt:             now,
 	}
@@ -134,9 +135,9 @@ func (h *Handler) ReferralSignup(w http.ResponseWriter, r *http.Request) {
 
 	// Insert school into Postgres
 	_, err = tx.Exec(ctx, `
-		INSERT INTO schools (id, school_id, name, code, phone, status, approval_status, referred_by_publisher_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, school.ID, school.SchoolID, school.Name, school.Code, school.Phone, school.Status, school.ApprovalStatus, publisherID, now, now)
+		INSERT INTO schools (id, school_id, name, code, phone, status, approval_status, referred_by_publisher_id, admin_name, admin_email, referral_admin_password, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	`, school.ID, school.SchoolID, school.Name, school.Code, school.Phone, school.Status, school.ApprovalStatus, publisherID, fullName, email, password, now, now)
 	if err != nil {
 		api.WriteJSON(w, http.StatusInternalServerError, signupErr("Failed to create school"))
 		return

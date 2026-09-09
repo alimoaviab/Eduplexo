@@ -40,6 +40,18 @@ func (m *mockEmailClient) SendOTP(ctx context.Context, toEmail, toName, otp stri
 	return nil
 }
 
+func (m *mockEmailClient) SendPasswordResetOTP(ctx context.Context, toEmail, toName, otp string, expiryMinutes int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sentOTPs = append(m.sentOTPs, mockEmailCall{
+		ToEmail:       toEmail,
+		ToName:        toName,
+		OTP:           otp,
+		ExpiryMinutes: expiryMinutes,
+	})
+	return nil
+}
+
 func (m *mockEmailClient) lastSent() *mockEmailCall {
 	m.mu.Lock()
 	defer m.mu.Unlock()

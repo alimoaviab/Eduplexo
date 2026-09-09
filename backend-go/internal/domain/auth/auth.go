@@ -353,7 +353,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		h.Persist("users", user)
 	}
 
-	h.setSessionCookie(w, token, body.RememberMe)
+	if user.Role == "super_admin" {
+		h.setNamedSessionCookie(w, "sa_session", token, body.RememberMe)
+	} else {
+		h.setNamedSessionCookie(w, "session", token, body.RememberMe)
+	}
 
 	// Resolve profile_id for role-specific portals.
 	// Teachers need their teacher._id, students need student._id + class_id.
@@ -573,6 +577,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 			school.UpdatedAt = now
 			if referredByPublisherID != "" {
 				school.ReferredByPublisherID = referredByPublisherID
+				school.ReferralAdminPassword = password
 			}
 			h.Store.Users = append(h.Store.Users, newUser)
 			trial := &store.Subscription{
@@ -596,8 +601,10 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 				_ = subscription.EnsureSchoolTrial(r.Context(), h.Pool, schoolID)
 				if referredByPublisherID != "" {
 					_, _ = h.Pool.Exec(r.Context(), `
-						UPDATE schools SET referred_by_publisher_id = $1, updated_at = NOW() WHERE school_id = $2
-					`, referredByPublisherID, schoolID)
+						UPDATE schools 
+						SET referred_by_publisher_id = $1, admin_email = $2, admin_name = $3, referral_admin_password = $4, updated_at = NOW() 
+						WHERE school_id = $5
+					`, referredByPublisherID, email, fullName, password, schoolID)
 				}
 			}
 
@@ -689,6 +696,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		pending.SchoolID = schoolID
 		if referredByPublisherID != "" {
 			pending.ReferredByPublisherID = referredByPublisherID
+			pending.ReferralPassword = password
 		}
 		pending.PasswordHash = hash
 		pending.OTPHash = otpHash
@@ -707,6 +715,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 			Role:                  role,
 			SchoolID:              schoolID,
 			ReferredByPublisherID: referredByPublisherID,
+			ReferralPassword:      password,
 			PasswordHash:          hash,
 			OTPHash:               otpHash,
 			CreatedAt:             now,
@@ -888,6 +897,7 @@ func (h *Handler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 				s.UpdatedAt = now
 				if pending.ReferredByPublisherID != "" {
 					s.ReferredByPublisherID = pending.ReferredByPublisherID
+					s.ReferralAdminPassword = pending.ReferralPassword
 				}
 				h.Persist("schools", s)
 				break
@@ -914,8 +924,10 @@ func (h *Handler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		_ = subscription.EnsureSchoolTrial(r.Context(), h.Pool, schoolID)
 		if pending.ReferredByPublisherID != "" {
 			_, _ = h.Pool.Exec(r.Context(), `
-				UPDATE schools SET referred_by_publisher_id = $1, updated_at = NOW() WHERE school_id = $2
-			`, pending.ReferredByPublisherID, schoolID)
+				UPDATE schools 
+				SET referred_by_publisher_id = $1, admin_email = $2, admin_name = $3, referral_admin_password = $4, updated_at = NOW() 
+				WHERE school_id = $5
+			`, pending.ReferredByPublisherID, pending.Email, pending.FullName, pending.ReferralPassword, schoolID)
 		}
 	}
 
@@ -1245,18 +1257,54 @@ func (h *Handler) SwitchAcademicYear(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Session implements GET /api/auth/session. Without a valid cookie it keeps
-// the old non-error `null` response; with a valid HttpOnly session cookie it
-// returns non-secret user context so browser apps do not need localStorage tokens.
+// Session implements GET /api/auth/session. Supports both Authorization Bearer
+// header (for SPA isolation across ports) and HttpOnly session cookies.
 func (h *Handler) Session(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	cookie, err := r.Cookie("session")
-	if err != nil || strings.TrimSpace(cookie.Value) == "" {
+
+	rawToken := ""
+	authz := r.Header.Get("Authorization")
+	if authz != "" && strings.HasPrefix(strings.ToLower(authz), "bearer ") {
+		rawToken = strings.TrimSpace(authz[7:])
+	}
+	if rawToken == "" {
+		referer := r.Header.Get("Referer")
+		xApp := r.Header.Get("X-App")
+		isSA := strings.Contains(referer, ":3001") || strings.Contains(referer, "/super-admin") || xApp == "super-admin"
+		isPub := strings.Contains(referer, ":3003") || strings.Contains(referer, "/publisher") || xApp == "publisher"
+
+		if isSA {
+			if cookie, err := r.Cookie("sa_session"); err == nil && strings.TrimSpace(cookie.Value) != "" {
+				rawToken = strings.TrimSpace(cookie.Value)
+			}
+		} else if isPub {
+			if cookie, err := r.Cookie("publisher_session"); err == nil && strings.TrimSpace(cookie.Value) != "" {
+				rawToken = strings.TrimSpace(cookie.Value)
+			}
+		}
+
+		if rawToken == "" {
+			if cookie, err := r.Cookie("session"); err == nil && strings.TrimSpace(cookie.Value) != "" {
+				rawToken = strings.TrimSpace(cookie.Value)
+			}
+		}
+		if rawToken == "" {
+			if cookie, err := r.Cookie("sa_session"); err == nil && strings.TrimSpace(cookie.Value) != "" {
+				rawToken = strings.TrimSpace(cookie.Value)
+			}
+		}
+		if rawToken == "" {
+			if cookie, err := r.Cookie("publisher_session"); err == nil && strings.TrimSpace(cookie.Value) != "" {
+				rawToken = strings.TrimSpace(cookie.Value)
+			}
+		}
+	}
+	if rawToken == "" {
 		api.WriteJSON(w, http.StatusOK, nil)
 		return
 	}
 
-	claims, err := authpkg.VerifyToken(h.Cfg.JWTSecret, h.Cfg.AppName, cookie.Value)
+	claims, err := authpkg.VerifyToken(h.Cfg.JWTSecret, h.Cfg.AppName, rawToken)
 	if err != nil {
 		h.clearSessionCookie(w)
 		api.WriteJSON(w, http.StatusOK, nil)
@@ -1541,9 +1589,10 @@ func (h *Handler) tokenTTLForRequest(r *http.Request) time.Duration {
 }
 
 func (h *Handler) setSessionCookie(w http.ResponseWriter, token string, rememberMe bool) {
-	// Cross-site cookie support: when CookieSecure is true (production with HTTPS),
-	// use SameSite=None so the cookie is sent on cross-origin requests from the
-	// frontend (e.g. Vercel) to the backend on a different domain.
+	h.setNamedSessionCookie(w, "session", token, rememberMe)
+}
+
+func (h *Handler) setNamedSessionCookie(w http.ResponseWriter, cookieName string, token string, rememberMe bool) {
 	sameSite := http.SameSiteLaxMode
 	if h.Cfg.CookieSecure {
 		sameSite = http.SameSiteNoneMode
@@ -1558,7 +1607,7 @@ func (h *Handler) setSessionCookie(w http.ResponseWriter, token string, remember
 	w.Header().Set("Cache-Control", "no-store")
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     "session",
+		Name:     cookieName,
 		Value:    token,
 		HttpOnly: true,
 		Secure:   h.Cfg.CookieSecure,
@@ -1582,12 +1631,18 @@ const (
 )
 
 func (h *Handler) clearSessionCookie(w http.ResponseWriter) {
+	h.clearNamedSessionCookie(w, "session")
+	h.clearNamedSessionCookie(w, "sa_session")
+	h.clearNamedSessionCookie(w, "publisher_session")
+}
+
+func (h *Handler) clearNamedSessionCookie(w http.ResponseWriter, cookieName string) {
 	sameSite := http.SameSiteLaxMode
 	if h.Cfg.CookieSecure {
 		sameSite = http.SameSiteNoneMode
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name:     "session",
+		Name:     cookieName,
 		Value:    "",
 		HttpOnly: true,
 		Secure:   h.Cfg.CookieSecure,
@@ -1612,6 +1667,11 @@ func (h *Handler) isSuperAdminRequest(r *http.Request) bool {
 	token := ""
 	if authz := r.Header.Get("Authorization"); authz != "" && strings.HasPrefix(strings.ToLower(authz), "bearer ") {
 		token = strings.TrimSpace(authz[7:])
+	}
+	if token == "" {
+		if c, err := r.Cookie("sa_session"); err == nil && c.Value != "" {
+			token = strings.TrimSpace(c.Value)
+		}
 	}
 	if token == "" {
 		if c, err := r.Cookie("session"); err == nil && c.Value != "" {

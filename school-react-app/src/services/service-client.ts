@@ -335,6 +335,7 @@ async function executeServiceRequest<T>(
           credentials: "include",
           headers: {
             "content-type": "application/json",
+            "x-app": "school-app",
             "x-academic-year-id": readAcademicYearId(),
             "x-school-id": readActiveSchoolId(),
             "x-branch-id": readActiveBranchId(),

@@ -8,12 +8,14 @@
 #   * frontend        — School SPA (admin/teacher/student) on :3000
 #   * super-admin     — Super Admin SPA on :3001
 #   * landing         — Public marketing site on :3002
+#   * partner         — Partner / Publisher Portal on :3003
 #   * edubot          — Plexa AI chatbot (FastAPI/Python) on :8001
 #
 # After `docker compose up --build`:
 #   * Landing at   http://localhost:3002
 #   * Frontend at  http://localhost:3000
 #   * Super Admin  http://localhost:3001
+#   * Partner App  http://localhost:3003
 #   * Backend at   http://localhost:8081
 #   * Plexa at    http://localhost:8001
 #   * Postgres on  127.0.0.1:5432  (user/pass: school_user/school_password)
@@ -145,9 +147,9 @@ services:
     environment:
       PORT: "8080"
       APP_NAME: school
-      ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://frontend:80,http://super-admin:80,http://landing:80"
+      ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://frontend:80,http://super-admin:80,http://landing:80,http://partner:80"
       COOKIE_SECURE: "true"
-      JWT_SECRET: ${JWT_SECRET:-}
+      JWT_SECRET: ${JWT_SECRET:-eduplexo-dev-super-secure-jwt-secret-key-at-least-32-chars-long}
       DATABASE_URL: postgres://school_user:school_password@postgres:5432/school_db?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
@@ -239,6 +241,33 @@ services:
         limits:
           memory: 96M
           cpus: "0.3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:80/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  partner:
+    build:
+      context: ./publisher-app
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend-go:
+        condition: service_started
+    ports:
+      - "3003:80"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.5"
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:80/ || exit 1"]
       interval: 30s

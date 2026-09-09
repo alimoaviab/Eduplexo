@@ -30,6 +30,7 @@ type MemStore struct {
 	Schools        []*School
 	Users          []*User
 	PendingSignups []*PendingSignup
+	PasswordResets []*PasswordReset
 	AcademicYears  []*AcademicYear
 	Students       []*Student
 	Teachers       []*Teacher

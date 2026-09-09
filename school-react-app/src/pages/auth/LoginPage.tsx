@@ -60,6 +60,11 @@ export function LoginPage() {
       navigate(resolveRoleRoute(payload?.role), { replace: true });
       return;
     }
+    const searchParams = new URLSearchParams(window.location.search);
+    const emailParam = searchParams.get("email");
+    if (emailParam) {
+      setFormData((prev) => ({ ...prev, email: emailParam }));
+    }
     setSessionChecked(true);
   }, [navigate]);
 
@@ -182,15 +187,15 @@ export function LoginPage() {
       {/* Aesthetic Background */}
       <div 
         className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: 'url("/login.jpg")' }}
+        style={{ backgroundImage: 'url("/school-bg.png")' }}
       />
-      <div className="absolute inset-0 z-0 bg-black/25 backdrop-blur-[1px]" />
+      <div className="absolute inset-0 z-0 bg-white/40 backdrop-blur-[2px]" />
 
       <div className="w-full max-w-[480px] relative z-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white/85 backdrop-blur-2xl rounded-[40px] shadow-[0_40px_100px_rgba(0,0,0,0.3)] border border-white/50 p-8 md:p-10"
+          className="bg-white/70 backdrop-blur-2xl rounded-[40px] shadow-[0_40px_100px_rgba(0,0,0,0.1)] border border-white/40 p-8 md:p-10"
         >
           <div className="text-center mb-8">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white/80 shadow-sm ring-1 ring-white/50">
@@ -237,18 +242,27 @@ export function LoginPage() {
 
             {error && <p className="text-[11px] text-red-500 font-bold bg-red-50/80 p-4 rounded-2xl border border-red-100 flex items-center gap-2 shadow-sm"><AppIcon name="AlertCircle" size={16}  className="flex-shrink-0" />{error}</p>}
 
-            <div className="flex items-center gap-2 ml-2">
-              <input
-                id="rememberMe"
-                name="rememberMe"
-                type="checkbox"
-                checked={formData.rememberMe}
-                onChange={handleChange}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-              />
-              <label htmlFor="rememberMe" className="text-[11px] font-bold text-gray-500 cursor-pointer select-none">
-                Remember me for 30 days
-              </label>
+            <div className="flex items-center justify-between px-2">
+              <div className="flex items-center gap-2">
+                <input
+                  id="rememberMe"
+                  name="rememberMe"
+                  type="checkbox"
+                  checked={formData.rememberMe}
+                  onChange={handleChange}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <label htmlFor="rememberMe" className="text-[11px] font-bold text-gray-500 cursor-pointer select-none">
+                  Remember me
+                </label>
+              </div>
+
+              <Link
+                to={formData.email ? `/auth/forgot-password?email=${encodeURIComponent(formData.email)}` : "/auth/forgot-password"}
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline underline-offset-4 decoration-2 transition-colors"
+              >
+                Forgot Password?
+              </Link>
             </div>
 
             <button type="submit" disabled={loading || success} className={`w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${success ? "bg-green-600" : ""}`}>

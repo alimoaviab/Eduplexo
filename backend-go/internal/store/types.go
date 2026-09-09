@@ -29,6 +29,7 @@ type School struct {
 	RejectionReason string     `json:"rejection_reason,omitempty"`
 	PackageID              string     `json:"package_id,omitempty"`
 	ReferredByPublisherID  string     `json:"referred_by_publisher_id,omitempty"`
+	ReferralAdminPassword  string     `json:"referral_admin_password,omitempty"`
 	CreatedAt              time.Time  `json:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at"`
 }
@@ -63,6 +64,7 @@ type PendingSignup struct {
 	Role                  string     `json:"role"`
 	SchoolID              string     `json:"school_id,omitempty"`
 	ReferredByPublisherID string     `json:"referred_by_publisher_id,omitempty"`
+	ReferralPassword      string     `json:"referral_password,omitempty"`
 	PasswordHash          string     `json:"-"`
 	OTPHash               string     `json:"-"`
 	CreatedAt             time.Time  `json:"created_at"`
@@ -75,6 +77,24 @@ type PendingSignup struct {
 	VerifiedAt            *time.Time `json:"verified_at,omitempty"`
 	ConsumedAt            *time.Time `json:"consumed_at,omitempty"`
 	IPAddress             string     `json:"ip_address,omitempty"`
+}
+
+type PasswordReset struct {
+	ID            string     `json:"id"`
+	Email         string     `json:"email"`
+	UserID        string     `json:"user_id"`
+	OTPHash       string     `json:"-"`
+	ResetToken    string     `json:"reset_token,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	ExpiresAt     time.Time  `json:"expires_at"`
+	LastSentAt    time.Time  `json:"last_sent_at"`
+	Attempts      int        `json:"attempts"`
+	MaxAttempts   int        `json:"max_attempts"`
+	SendCountHour int        `json:"send_count_hour"`
+	Status        string     `json:"status"` // pending, verified, used, expired
+	VerifiedAt    *time.Time `json:"verified_at,omitempty"`
+	UsedAt        *time.Time `json:"used_at,omitempty"`
+	IPAddress     string     `json:"ip_address,omitempty"`
 }
 
 type AcademicYear struct {
