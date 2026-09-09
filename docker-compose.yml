@@ -149,7 +149,7 @@ services:
       APP_NAME: school
       ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://frontend:80,http://super-admin:80,http://landing:80,http://partner:80"
       COOKIE_SECURE: "true"
-      JWT_SECRET: ${JWT_SECRET:-}
+      JWT_SECRET: ${JWT_SECRET:-eduplexo-dev-super-secure-jwt-secret-key-at-least-32-chars-long}
       DATABASE_URL: postgres://school_user:school_password@postgres:5432/school_db?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}

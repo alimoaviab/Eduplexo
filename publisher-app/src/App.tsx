@@ -62,9 +62,7 @@ export default function App() {
       setDashboard(res.data)
     } else if (res.status === 401 || res.status === 403) {
       handleLogout()
-      if (res.message) {
-        setLoginError(res.message)
-      }
+      setLoginError('Your session has expired. Please sign in again.')
     } else {
       setLoginError(res.message || 'Failed to load partner dashboard')
     }
