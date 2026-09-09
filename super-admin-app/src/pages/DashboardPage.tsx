@@ -328,18 +328,11 @@ export function DashboardPage() {
                 <span>Subscriptions</span>
               </Link>
               <Link
-                to="/packages"
-                className="p-3 bg-slate-50 hover:bg-purple-50 hover:text-purple-700 border border-slate-100 rounded-xl font-bold text-slate-700 transition-colors flex flex-col items-center justify-center gap-1.5 text-center"
+                to="/security"
+                className="p-3 bg-slate-50 hover:bg-amber-50 hover:text-amber-700 border border-slate-100 rounded-xl font-bold text-slate-700 transition-colors flex flex-col items-center justify-center gap-1.5 text-center"
               >
-                <AppIcon name="Package" size={18} className="text-purple-600" />
-                <span>Packages</span>
-              </Link>
-              <Link
-                to="/ai-usage"
-                className="p-3 bg-slate-50 hover:bg-cyan-50 hover:text-cyan-700 border border-slate-100 rounded-xl font-bold text-slate-700 transition-colors flex flex-col items-center justify-center gap-1.5 text-center"
-              >
-                <AppIcon name="Bot" size={18} className="text-cyan-600" />
-                <span>AI Usage</span>
+                <AppIcon name="KeyRound" size={18} className="text-amber-600" />
+                <span>Security</span>
               </Link>
               <Link
                 to="/users"
