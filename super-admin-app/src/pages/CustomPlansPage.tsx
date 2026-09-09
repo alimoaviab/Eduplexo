@@ -208,8 +208,8 @@ export function CustomPlansPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
-  const runSearch = async () => {
-    const q = query.trim()
+  const runSearch = useCallback(async (customQuery?: string) => {
+    const q = typeof customQuery === 'string' ? customQuery.trim() : query.trim()
     setSearching(true)
     setSearched(true)
     const res = await apiRequest<{ items: OwnerSearchResult[] }>(
@@ -218,11 +218,16 @@ export function CustomPlansPage() {
     setSearching(false)
     if (res.ok && res.data?.items) {
       setOwners(res.data.items)
-      if (res.data.items.length === 0) showToast('No owners matched your search.', 'info')
+      if (res.data.items.length === 0 && q) showToast('No owners matched your search.', 'info')
     } else {
       showToast(errText(res), 'error')
     }
-  }
+  }, [query])
+
+  // Initial load: fetch all registered owners by default
+  useEffect(() => {
+    void runSearch('')
+  }, [])
 
   const openCreate = () => {
     setEditId(null)
@@ -379,14 +384,20 @@ export function CustomPlansPage() {
                 </div>
                 <input
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && runSearch()}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setQuery(val)
+                    if (!val.trim()) {
+                      void runSearch('')
+                    }
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && void runSearch()}
                   placeholder="Type owner name, email, phone, school or code…"
                   className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                 />
               </div>
               <button
-                onClick={runSearch}
+                onClick={() => void runSearch()}
                 disabled={searching}
                 className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition disabled:opacity-50 flex items-center justify-center gap-1.5"
               >

@@ -508,7 +508,7 @@ func (h *Handler) ListSchools(w http.ResponseWriter, r *http.Request) {
 			LEFT JOIN LATERAL (
 				SELECT sub.plan_name, sub.end_date, sub.status, sub.is_trial, sub.student_limit, sub.grace_ends_at
 				FROM subscriptions sub
-				WHERE sub.school_id = s.school_id
+				WHERE sub.school_id = s.school_id OR sub.school_id = s.id
 				ORDER BY CASE
 					-- Tier 0: Live active paid or custom plan
 					WHEN sub.status = 'active' AND sub.is_trial = false AND sub.start_date <= NOW() AND sub.end_date > NOW() THEN 0
@@ -527,9 +527,9 @@ func (h *Handler) ListSchools(w http.ResponseWriter, r *http.Request) {
 				LIMIT 1
 			) sub ON true
 			LEFT JOIN LATERAL (
-				SELECT COALESCE(SUM(amount) FILTER (WHERE status IN ('verified', 'activated')), 0) AS total_paid
+				SELECT COALESCE(SUM(amount) FILTER (WHERE status IN ('approved', 'verified', 'activated')), 0) AS total_paid
 				FROM payment_requests pr
-				WHERE pr.school_id = s.school_id
+				WHERE pr.school_id = s.school_id OR pr.school_id = s.id
 			) pay ON true
 			WHERE s.school_id NOT IN ('system', '__global__') AND s.school_id <> ''
 			ORDER BY s.created_at DESC
@@ -610,6 +610,14 @@ func (h *Handler) ListSchools(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		daysRem := 0
+		if expiry.After(time.Now()) {
+			daysRem = int(time.Until(expiry).Hours() / 24)
+			if daysRem == 0 {
+				daysRem = 1
+			}
+		}
+
 		schools = append(schools, schoolView{
 				ID:            s.ID,
 				SchoolID:      s.SchoolID,
@@ -627,6 +635,7 @@ func (h *Handler) ListSchools(w http.ResponseWriter, r *http.Request) {
 				UpdatedAt:     s.UpdatedAt,
 				SubStatus:     subStatus,
 				IsTrial:       subStatus == "trial",
+				DaysRemaining: daysRem,
 			})
 	}
 
@@ -768,9 +777,9 @@ func (h *Handler) GetSchool(w http.ResponseWriter, r *http.Request) {
 				LIMIT 1
 			) sub ON true
 			LEFT JOIN LATERAL (
-				SELECT COALESCE(SUM(amount) FILTER (WHERE status IN ('verified', 'activated')), 0) AS total_paid
+				SELECT COALESCE(SUM(amount) FILTER (WHERE status IN ('approved', 'verified', 'activated')), 0) AS total_paid
 				FROM payment_requests pr
-				WHERE pr.school_id = s.school_id
+				WHERE pr.school_id = s.school_id OR pr.school_id = s.id
 			) pay ON true
 			WHERE s.id = $1 OR s.school_id = $1
 			   OR s.school_id IN (SELECT COALESCE(school_id,'') FROM users WHERE id = $1 OR email = $1)
@@ -1346,21 +1355,44 @@ func (h *Handler) DeleteSchool(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	if schoolIdx == -1 {
+	if schoolIdx == -1 && h.Pool != nil {
+		_ = h.Pool.QueryRow(r.Context(), `SELECT school_id FROM schools WHERE id = $1 OR school_id = $1 LIMIT 1`, id).Scan(&targetSchoolID)
+	}
+	if schoolIdx == -1 && targetSchoolID == "" {
 		api.WriteResult(w, api.Fail("NOT_FOUND", "School not found.", 404, nil))
 		return
 	}
+	if targetSchoolID == "" {
+		targetSchoolID = id
+	}
 
-	// Remove all associated data
-	h.Store.Users = filterSlice(h.Store.Users, func(u *store.User) bool { return u.SchoolID != targetSchoolID })
-	h.Store.Students = filterSlice(h.Store.Students, func(s *store.Student) bool { return s.SchoolID != targetSchoolID })
-	h.Store.Teachers = filterSlice(h.Store.Teachers, func(t *store.Teacher) bool { return t.SchoolID != targetSchoolID })
-	h.Store.Classes = filterSlice(h.Store.Classes, func(c *store.Class) bool { return c.SchoolID != targetSchoolID })
-	h.Store.AcademicYears = filterSlice(h.Store.AcademicYears, func(a *store.AcademicYear) bool { return a.SchoolID != targetSchoolID })
-	h.Store.Subscriptions = filterSlice(h.Store.Subscriptions, func(s *store.Subscription) bool { return s.SchoolID != targetSchoolID })
+	// Remove all associated data from memory
+	h.Store.Users = filterSlice(h.Store.Users, func(u *store.User) bool { return u.SchoolID != targetSchoolID && u.SchoolID != id })
+	h.Store.Students = filterSlice(h.Store.Students, func(s *store.Student) bool { return s.SchoolID != targetSchoolID && s.SchoolID != id })
+	h.Store.Teachers = filterSlice(h.Store.Teachers, func(t *store.Teacher) bool { return t.SchoolID != targetSchoolID && t.SchoolID != id })
+	h.Store.Classes = filterSlice(h.Store.Classes, func(c *store.Class) bool { return c.SchoolID != targetSchoolID && c.SchoolID != id })
+	h.Store.AcademicYears = filterSlice(h.Store.AcademicYears, func(a *store.AcademicYear) bool { return a.SchoolID != targetSchoolID && a.SchoolID != id })
+	h.Store.Subscriptions = filterSlice(h.Store.Subscriptions, func(s *store.Subscription) bool { return s.SchoolID != targetSchoolID && s.SchoolID != id })
 
-	// Remove the school itself
-	h.Store.Schools = append(h.Store.Schools[:schoolIdx], h.Store.Schools[schoolIdx+1:]...)
+	if schoolIdx != -1 {
+		// Remove the school itself
+		h.Store.Schools = append(h.Store.Schools[:schoolIdx], h.Store.Schools[schoolIdx+1:]...)
+	}
+
+	// Cascade delete from PostgreSQL tables
+	if h.Pool != nil {
+		ctx := r.Context()
+		_, _ = h.Pool.Exec(ctx, `DELETE FROM users WHERE school_id = $1 OR school_id = $2`, targetSchoolID, id)
+		_, _ = h.Pool.Exec(ctx, `DELETE FROM subscriptions WHERE school_id = $1 OR school_id = $2`, targetSchoolID, id)
+		_, _ = h.Pool.Exec(ctx, `DELETE FROM subscription_history WHERE school_id = $1 OR school_id = $2`, targetSchoolID, id)
+		_, _ = h.Pool.Exec(ctx, `DELETE FROM payment_requests WHERE school_id = $1 OR school_id = $2`, targetSchoolID, id)
+		_, _ = h.Pool.Exec(ctx, `DELETE FROM campuses WHERE school_id = $1 OR school_id = $2`, targetSchoolID, id)
+		_, _ = h.Pool.Exec(ctx, `DELETE FROM students WHERE school_id = $1 OR school_id = $2`, targetSchoolID, id)
+		_, _ = h.Pool.Exec(ctx, `DELETE FROM teachers WHERE school_id = $1 OR school_id = $2`, targetSchoolID, id)
+		_, _ = h.Pool.Exec(ctx, `DELETE FROM classes WHERE school_id = $1 OR school_id = $2`, targetSchoolID, id)
+		_, _ = h.Pool.Exec(ctx, `DELETE FROM academic_years WHERE school_id = $1 OR school_id = $2`, targetSchoolID, id)
+		_, _ = h.Pool.Exec(ctx, `DELETE FROM schools WHERE school_id = $1 OR id = $2`, targetSchoolID, id)
+	}
 
 	if h.Persist != nil {
 		h.Persist("schools:delete", targetSchoolID)
@@ -1535,13 +1567,44 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	defer h.Store.RUnlock()
 
 	type userView struct {
-		ID        string    `json:"_id"`
-		Email     string    `json:"email"`
-		Role      string    `json:"role"`
-		SchoolID  string    `json:"school_id"`
-		Status    string    `json:"status"`
-		Name      string    `json:"name"`
-		CreatedAt time.Time `json:"created_at"`
+		ID          string     `json:"_id"`
+		Email       string     `json:"email"`
+		Role        string     `json:"role"`
+		SchoolID    string     `json:"school_id"`
+		Status      string     `json:"status"`
+		Name        string     `json:"name"`
+		CreatedAt   time.Time  `json:"created_at"`
+		LastLoginAt *time.Time `json:"last_login_at,omitempty"`
+	}
+
+	if h.Pool != nil {
+		like := "%" + search + "%"
+		rows, err := h.Pool.Query(r.Context(), `
+			SELECT u.id, u.email, u.role, COALESCE(u.school_id, ''), COALESCE(u.status, 'active'),
+			       COALESCE(NULLIF(TRIM(COALESCE(u.profile_first, '') || ' ' || COALESCE(u.profile_last, '')), ''), u.email),
+			       u.created_at, u.last_login_at
+			FROM users u
+			WHERE ($1 = '' OR u.role = $1)
+			  AND ($2 = '' OR LOWER(u.email) LIKE $3 OR LOWER(COALESCE(u.profile_first, '') || ' ' || COALESCE(u.profile_last, '')) LIKE $3)
+			ORDER BY u.created_at DESC
+		`, roleFilter, search, like)
+		if err == nil {
+			defer rows.Close()
+			users := make([]userView, 0)
+			for rows.Next() {
+				var uv userView
+				if err := rows.Scan(&uv.ID, &uv.Email, &uv.Role, &uv.SchoolID, &uv.Status, &uv.Name, &uv.CreatedAt, &uv.LastLoginAt); err == nil {
+					users = append(users, uv)
+				}
+			}
+			page := api.ParsePagination(q)
+			if !page.Enabled {
+				api.WriteResult(w, api.Ok(map[string]any{"items": users, "total": len(users)}))
+				return
+			}
+			api.WriteResult(w, api.Ok(api.BuildPaginated(api.SafeSlice(users, page.Skip, page.Skip+page.Limit), len(users), page)))
+			return
+		}
 	}
 
 	users := make([]userView, 0)
@@ -1553,13 +1616,14 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		users = append(users, userView{
-			ID:        u.ID,
-			Email:     u.Email,
-			Role:      u.Role,
-			SchoolID:  u.SchoolID,
-			Status:    u.Status,
-			Name:      u.Profile.FirstName + " " + u.Profile.LastName,
-			CreatedAt: u.CreatedAt,
+			ID:          u.ID,
+			Email:       u.Email,
+			Role:        u.Role,
+			SchoolID:    u.SchoolID,
+			Status:      u.Status,
+			Name:        u.Profile.FirstName + " " + u.Profile.LastName,
+			CreatedAt:   u.CreatedAt,
+			LastLoginAt: u.LastLoginAt,
 		})
 	}
 

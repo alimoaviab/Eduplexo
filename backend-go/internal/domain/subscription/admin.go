@@ -286,9 +286,9 @@ func (h *Handler) AdminListSubscriptions(w http.ResponseWriter, r *http.Request)
 			) u ON true
 			LEFT JOIN (
 				SELECT school_id, 
-				       COUNT(*) FILTER (WHERE status IN ('verified', 'activated')) AS approved_count,
-				       COALESCE(SUM(amount) FILTER (WHERE status IN ('verified', 'activated')), 0) AS total_amount,
-				       MAX(verified_at) AS last_verified_at
+				       COUNT(*) FILTER (WHERE status IN ('approved', 'verified', 'activated')) AS approved_count,
+				       COALESCE(SUM(amount) FILTER (WHERE status IN ('approved', 'verified', 'activated')), 0) AS total_amount,
+				       MAX(COALESCE(verified_at, submitted_at)) AS last_verified_at
 				FROM payment_requests
 				GROUP BY school_id
 			) pay ON pay.school_id = s.school_id

@@ -162,15 +162,18 @@ export function SchoolsPage() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {schools.map((school) => {
-                // Prefer the backend-computed days_remaining; fall back to expiry math.
-                const days =
-                  typeof school.days_remaining === 'number'
-                    ? school.days_remaining
-                    : Math.ceil(((school.expiry ? new Date(school.expiry).getTime() : 0) - Date.now()) / (1000 * 60 * 60 * 24))
+                // If expiry date is in the future, compute days left directly from expiry if days_remaining is missing or 0
+                const expiryTime = school.expiry ? new Date(school.expiry).getTime() : 0
+                const nowTime = Date.now()
+                const isFutureExpiry = expiryTime > nowTime
+                const calculatedDays = isFutureExpiry ? Math.max(1, Math.ceil((expiryTime - nowTime) / (1000 * 60 * 60 * 24))) : 0
+                const days = (typeof school.days_remaining === 'number' && school.days_remaining > 0)
+                  ? school.days_remaining
+                  : calculatedDays
+
                 const isPaidPlan = school.plan && !school.plan.toLowerCase().includes('trial') && school.plan !== 'Free' && school.plan !== 'Free Trial'
                 const subStatus = school.subscription_status || ''
-                const isSuspended = subStatus === 'suspended'
-                const isTrial = Boolean(school.is_trial) || (school.plan || '').toLowerCase().includes('trial')
+                const isSuspended = subStatus === 'suspended' || school.status === 'suspended'
                 return (
                   <tr key={school._id} className="hover:bg-blue-50/30 transition-colors">
                     <td className="px-4 py-3">
@@ -204,13 +207,13 @@ export function SchoolsPage() {
                         </span>
                       ) : school.expiry ? (
                         <div>
-                          {days <= 0 ? (
+                          {days <= 0 && !isFutureExpiry ? (
                             <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
                               Expired
                             </span>
                           ) : isPaidPlan ? (
                             <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                              {days} days remaining
+                              {days} {days === 1 ? 'day' : 'days'} remaining
                             </span>
                           ) : (
                             <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
@@ -249,7 +252,7 @@ export function SchoolsPage() {
                         {school.status === 'active' && (
                           <button
                             onClick={() => setActionModal({ schoolId: school._id, name: school.name, type: 'suspend' })}
-                            className="h-7 px-2.5 text-[10px] font-bold text-red-700 bg-red-50 border border-red-100 rounded-xl hover:bg-red-100 transition-colors"
+                            className="h-7 px-2.5 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl hover:bg-amber-100 transition-colors"
                           >
                             Suspend
                           </button>
@@ -263,6 +266,14 @@ export function SchoolsPage() {
                             Reactivate
                           </button>
                         )}
+                        <button
+                          onClick={() => setActionModal({ schoolId: school._id, name: school.name, type: 'delete' })}
+                          disabled={isProcessing}
+                          className="h-7 px-2.5 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-100 rounded-xl hover:bg-rose-100 transition-colors"
+                          title="Delete School and associated data"
+                        >
+                          Delete
+                        </button>
                       </div>
                     </td>
                   </tr>

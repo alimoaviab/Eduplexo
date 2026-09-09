@@ -11,8 +11,6 @@ const navItems = [
 	{ label: 'Payments', href: '/payments', icon: 'CreditCard' },
 	{ label: 'Subscriptions', href: '/subscriptions', icon: 'Award' },
 	{ label: 'Custom Plans', href: '/custom-plans', icon: 'FileText' },
-	{ label: 'Packages', href: '/packages', icon: 'Package' },
-	{ label: 'AI Usage', href: '/ai-usage', icon: 'Bot' },
 	{ label: 'Users', href: '/users', icon: 'Users' },
 	{ label: 'Settings', href: '/settings', icon: 'Settings' },
 ]

@@ -48,6 +48,19 @@ export function UsersPage() {
     return 'bg-slate-50 text-slate-500 border-slate-100'
   }
 
+  const formatLastLogin = (dateStr?: string) => {
+    if (!dateStr) return 'Never'
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime()) || d.getTime() === 0) return 'Never'
+    return d.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between">
@@ -131,8 +144,8 @@ export function UsersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-[10px] text-slate-500 font-mono">{user.school_id}</td>
-                  <td className="px-4 py-3 text-[10px] text-slate-500">
-                    {user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'Never'}
+                  <td className="px-4 py-3 text-[10px] text-slate-600 font-medium">
+                    {formatLastLogin(user.last_login_at)}
                   </td>
                 </tr>
               ))}
