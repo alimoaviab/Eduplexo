@@ -44,6 +44,7 @@ func (p *Persister) Load(ctx context.Context, s *store.MemStore) error {
 		{"subscriptions", p.loadSubscriptions},
 		{"users", p.loadUsers},
 		{"pending_signups", p.loadPendingSignups},
+		{"password_resets", p.loadPasswordResets},
 		{"academic_years", p.loadAcademicYears},
 		{"subjects", p.loadSubjects},
 		{"teachers", p.loadTeachers},
@@ -372,6 +373,30 @@ func (p *Persister) loadPendingSignups(ctx context.Context, s *store.MemStore) e
 			return err
 		}
 		s.PendingSignups = append(s.PendingSignups, v)
+	}
+	return rows.Err()
+}
+
+func (p *Persister) loadPasswordResets(ctx context.Context, s *store.MemStore) error {
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, email, user_id, otp_hash, reset_token,
+			created_at, expires_at, last_sent_at, attempts, max_attempts,
+			send_count_hour, status, verified_at, used_at, ip_address
+		FROM password_resets
+		WHERE status IN ('pending', 'verified') AND expires_at > NOW()`)
+	if err != nil {
+		// Table may not exist yet on unmigrated instances
+		return nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		v := &store.PasswordReset{}
+		if err := rows.Scan(&v.ID, &v.Email, &v.UserID, &v.OTPHash, &v.ResetToken,
+			&v.CreatedAt, &v.ExpiresAt, &v.LastSentAt, &v.Attempts, &v.MaxAttempts,
+			&v.SendCountHour, &v.Status, &v.VerifiedAt, &v.UsedAt, &v.IPAddress); err != nil {
+			return err
+		}
+		s.PasswordResets = append(s.PasswordResets, v)
 	}
 	return rows.Err()
 }

@@ -79,6 +79,24 @@ type PendingSignup struct {
 	IPAddress             string     `json:"ip_address,omitempty"`
 }
 
+type PasswordReset struct {
+	ID            string     `json:"id"`
+	Email         string     `json:"email"`
+	UserID        string     `json:"user_id"`
+	OTPHash       string     `json:"-"`
+	ResetToken    string     `json:"reset_token,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	ExpiresAt     time.Time  `json:"expires_at"`
+	LastSentAt    time.Time  `json:"last_sent_at"`
+	Attempts      int        `json:"attempts"`
+	MaxAttempts   int        `json:"max_attempts"`
+	SendCountHour int        `json:"send_count_hour"`
+	Status        string     `json:"status"` // pending, verified, used, expired
+	VerifiedAt    *time.Time `json:"verified_at,omitempty"`
+	UsedAt        *time.Time `json:"used_at,omitempty"`
+	IPAddress     string     `json:"ip_address,omitempty"`
+}
+
 type AcademicYear struct {
 	ID          string    `json:"_id"`
 	SchoolID    string    `json:"school_id"`

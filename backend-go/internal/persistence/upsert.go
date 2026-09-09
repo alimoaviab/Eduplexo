@@ -26,6 +26,8 @@ func upsertRow(ctx context.Context, tx pgx.Tx, table string, doc any) error {
 		return upsertUser(ctx, tx, v)
 	case *store.PendingSignup:
 		return upsertPendingSignup(ctx, tx, v)
+	case *store.PasswordReset:
+		return upsertPasswordReset(ctx, tx, v)
 	case *store.AcademicYear:
 		return upsertAcademicYear(ctx, tx, v)
 	case *store.Subject:
@@ -304,6 +306,25 @@ func upsertPendingSignup(ctx context.Context, tx pgx.Tx, v *store.PendingSignup)
 	`, v.ID, v.Email, v.FullName, v.Phone, v.Role, schoolID, v.PasswordHash,
 		v.OTPHash, v.CreatedAt, v.ExpiresAt, v.LastSentAt, v.Attempts, v.MaxAttempts,
 		v.SendCountHour, v.Status, v.VerifiedAt, v.ConsumedAt, v.IPAddress)
+	return err
+}
+
+func upsertPasswordReset(ctx context.Context, tx pgx.Tx, v *store.PasswordReset) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO password_resets (id, email, user_id, otp_hash, reset_token,
+			created_at, expires_at, last_sent_at, attempts, max_attempts,
+			send_count_hour, status, verified_at, used_at, ip_address)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+		ON CONFLICT (id) DO UPDATE SET
+			email=EXCLUDED.email, user_id=EXCLUDED.user_id, otp_hash=EXCLUDED.otp_hash,
+			reset_token=EXCLUDED.reset_token, expires_at=EXCLUDED.expires_at,
+			last_sent_at=EXCLUDED.last_sent_at, attempts=EXCLUDED.attempts,
+			max_attempts=EXCLUDED.max_attempts, send_count_hour=EXCLUDED.send_count_hour,
+			status=EXCLUDED.status, verified_at=EXCLUDED.verified_at,
+			used_at=EXCLUDED.used_at, ip_address=EXCLUDED.ip_address
+	`, v.ID, v.Email, v.UserID, v.OTPHash, v.ResetToken,
+		v.CreatedAt, v.ExpiresAt, v.LastSentAt, v.Attempts, v.MaxAttempts,
+		v.SendCountHour, v.Status, v.VerifiedAt, v.UsedAt, v.IPAddress)
 	return err
 }
 
