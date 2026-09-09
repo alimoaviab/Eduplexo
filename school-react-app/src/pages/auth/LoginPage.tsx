@@ -60,6 +60,11 @@ export function LoginPage() {
       navigate(resolveRoleRoute(payload?.role), { replace: true });
       return;
     }
+    const searchParams = new URLSearchParams(window.location.search);
+    const emailParam = searchParams.get("email");
+    if (emailParam) {
+      setFormData((prev) => ({ ...prev, email: emailParam }));
+    }
     setSessionChecked(true);
   }, [navigate]);
 
@@ -237,18 +242,27 @@ export function LoginPage() {
 
             {error && <p className="text-[11px] text-red-500 font-bold bg-red-50/80 p-4 rounded-2xl border border-red-100 flex items-center gap-2 shadow-sm"><AppIcon name="AlertCircle" size={16}  className="flex-shrink-0" />{error}</p>}
 
-            <div className="flex items-center gap-2 ml-2">
-              <input
-                id="rememberMe"
-                name="rememberMe"
-                type="checkbox"
-                checked={formData.rememberMe}
-                onChange={handleChange}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-              />
-              <label htmlFor="rememberMe" className="text-[11px] font-bold text-gray-500 cursor-pointer select-none">
-                Remember me for 30 days
-              </label>
+            <div className="flex items-center justify-between px-2">
+              <div className="flex items-center gap-2">
+                <input
+                  id="rememberMe"
+                  name="rememberMe"
+                  type="checkbox"
+                  checked={formData.rememberMe}
+                  onChange={handleChange}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <label htmlFor="rememberMe" className="text-[11px] font-bold text-gray-500 cursor-pointer select-none">
+                  Remember me
+                </label>
+              </div>
+
+              <Link
+                to={formData.email ? `/auth/forgot-password?email=${encodeURIComponent(formData.email)}` : "/auth/forgot-password"}
+                className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline underline-offset-4 decoration-2 transition-colors"
+              >
+                Forgot Password?
+              </Link>
             </div>
 
             <button type="submit" disabled={loading || success} className={`w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${success ? "bg-green-600" : ""}`}>

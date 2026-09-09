@@ -24,6 +24,7 @@ import { AuthLayout } from "@/pages/auth/AuthLayout";
 import { LoginPage } from "@/pages/auth/LoginPage";
 import { SignupPage } from "@/pages/auth/SignupPage";
 import { ReferralSignupPage } from "@/pages/auth/ReferralSignupPage";
+import { ForgotPasswordPage } from "@/pages/auth/ForgotPasswordPage";
 
 // ─── Chunk Error Boundary ────────────────────────────────────────────────
 // Catches chunk load failures at the router level and auto-reloads.
@@ -143,6 +144,7 @@ export const router = createBrowserRouter([
           { path: "login", element: <LoginPage /> },
           { path: "signup", element: <SignupPage /> },
           { path: "register", element: <SignupPage /> },
+          { path: "forgot-password", element: <ForgotPasswordPage /> },
         ],
       },
       
