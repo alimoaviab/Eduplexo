@@ -581,6 +581,11 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 
 			if h.Pool != nil {
 				_ = subscription.EnsureSchoolTrial(r.Context(), h.Pool, schoolID)
+				if referredByPublisherID != "" {
+					_, _ = h.Pool.Exec(r.Context(), `
+						UPDATE schools SET referred_by_publisher_id = $1, updated_at = NOW() WHERE school_id = $2
+					`, referredByPublisherID, schoolID)
+				}
 			}
 
 			claims := authpkg.Claims{
