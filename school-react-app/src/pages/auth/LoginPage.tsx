@@ -182,15 +182,15 @@ export function LoginPage() {
       {/* Aesthetic Background */}
       <div 
         className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: 'url("/login.jpg")' }}
+        style={{ backgroundImage: 'url("/school-bg.png")' }}
       />
-      <div className="absolute inset-0 z-0 bg-black/25 backdrop-blur-[1px]" />
+      <div className="absolute inset-0 z-0 bg-white/40 backdrop-blur-[2px]" />
 
       <div className="w-full max-w-[480px] relative z-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white/85 backdrop-blur-2xl rounded-[40px] shadow-[0_40px_100px_rgba(0,0,0,0.3)] border border-white/50 p-8 md:p-10"
+          className="bg-white/70 backdrop-blur-2xl rounded-[40px] shadow-[0_40px_100px_rgba(0,0,0,0.1)] border border-white/40 p-8 md:p-10"
         >
           <div className="text-center mb-8">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white/80 shadow-sm ring-1 ring-white/50">
