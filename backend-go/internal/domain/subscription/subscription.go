@@ -1043,8 +1043,13 @@ func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
 		if targetSchoolID != "" && targetSchoolID != "system" && targetSchoolID != "__global__" {
 			rows, err = h.Pool.Query(r.Context(), `
 				SELECT id, school_id, plan_name, student_limit, amount, payment_status, start_date, end_date, action, created_at
-				FROM subscription_history
-				WHERE school_id = $1
+				FROM (
+					SELECT DISTINCT ON (school_id, action, plan_name, start_date, end_date, amount)
+						id, school_id, plan_name, student_limit, amount, payment_status, start_date, end_date, action, created_at
+					FROM subscription_history
+					WHERE school_id = $1
+					ORDER BY school_id, action, plan_name, start_date, end_date, amount, created_at DESC
+				) sub
 				ORDER BY created_at DESC
 				LIMIT 50
 			`, targetSchoolID)
@@ -1153,7 +1158,11 @@ func (h *Handler) recordHistory(ctx context.Context, schoolID, planName string, 
 	}
 	_, err := h.Pool.Exec(ctx, `
 		INSERT INTO subscription_history (id, school_id, plan_name, student_limit, amount, payment_status, start_date, end_date, action, created_at, owner_user_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), '')
+		SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), ''
+		WHERE NOT EXISTS (
+			SELECT 1 FROM subscription_history
+			WHERE school_id = $2 AND action = $9 AND start_date = $7 AND end_date = $8
+		)
 	`, store.NewID("sh"), schoolID, planName, studentLimit, amount, paymentStatus, start, end, action)
 	if err != nil {
 		log.Printf("[subscription] history record failed: %v", err)

@@ -1185,16 +1185,6 @@ func upsertStoreSubscription(ctx context.Context, tx pgx.Tx, v *store.Subscripti
 			trial_end_date=EXCLUDED.trial_end_date, updated_at=EXCLUDED.updated_at
 	`, v.ID, v.SchoolID, planName, studentLimit, price, "PKR", start, end, status,
 		isTrial, isTrial, trialStart, trialEnd, start, updated)
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(ctx, `
-		INSERT INTO subscription_history (id, school_id, plan_name, student_limit, amount,
-			payment_status, start_date, end_date, action, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-		ON CONFLICT (id) DO NOTHING
-	`, store.NewID("sh"), v.SchoolID, planName, studentLimit, price, "paid", start, end,
-		map[bool]string{true: "trial", false: "subscribe"}[isTrial], start)
 	return err
 }
 
