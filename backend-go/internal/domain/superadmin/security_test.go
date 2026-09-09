@@ -167,3 +167,108 @@ func contextWithRoute(req *http.Request, routeContext *chi.Context) context.Cont
 	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, routeContext)
 	return ctx
 }
+
+func TestSuperAdminGetAndUpdateCredentials(t *testing.T) {
+	s := superAdminTestStore()
+	hash, err := auth.HashPassword("Test@123")
+	if err != nil {
+		t.Fatalf("failed to hash password: %v", err)
+	}
+	s.Users = append(s.Users, &store.User{
+		ID:           "user_super",
+		SchoolID:     "system",
+		Email:        "super@eduplexo.com",
+		PasswordHash: hash,
+		Role:         "super_admin",
+		Status:       "active",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	})
+
+	var persistedTable string
+	var persistedUser any
+	h := NewWithPersist(s, func(table string, doc any) {
+		persistedTable = table
+		persistedUser = doc
+	})
+
+	// 1. GetCredentials test
+	getReq := httptest.NewRequest(http.MethodGet, "/api/super-admin/credentials", nil)
+	getReq = getReq.WithContext(api.WithContext(getReq.Context(), &api.RequestContext{
+		UserID:     "user_super",
+		ActorEmail: "super@eduplexo.com",
+		Role:       "super_admin",
+	}))
+	getRec := httptest.NewRecorder()
+	h.GetCredentials(getRec, getReq)
+
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from GetCredentials, got %d", getRec.Code)
+	}
+	getResult := decodeServiceResult(t, getRec)
+	dataMap, ok := getResult.Data.(map[string]any)
+	if !ok || dataMap["email"] != "super@eduplexo.com" {
+		t.Fatalf("expected email super@eduplexo.com, got %v", dataMap)
+	}
+
+	// 2. Reject incorrect current password
+	badReq := httptest.NewRequest(http.MethodPost, "/api/super-admin/credentials", strings.NewReader(`{
+		"current_password": "WrongPassword",
+		"new_email": "newadmin@eduplexo.com"
+	}`))
+	badReq = badReq.WithContext(api.WithContext(badReq.Context(), &api.RequestContext{
+		UserID:     "user_super",
+		ActorEmail: "super@eduplexo.com",
+		Role:       "super_admin",
+	}))
+	badRec := httptest.NewRecorder()
+	h.UpdateCredentials(badRec, badReq)
+	if badRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for wrong password, got %d", badRec.Code)
+	}
+
+	// 3. Reject duplicate email
+	dupReq := httptest.NewRequest(http.MethodPost, "/api/super-admin/credentials", strings.NewReader(`{
+		"current_password": "Test@123",
+		"new_email": "admin@test.school"
+	}`))
+	dupReq = dupReq.WithContext(api.WithContext(dupReq.Context(), &api.RequestContext{
+		UserID:     "user_super",
+		ActorEmail: "super@eduplexo.com",
+		Role:       "super_admin",
+	}))
+	dupRec := httptest.NewRecorder()
+	h.UpdateCredentials(dupRec, dupReq)
+	if dupRec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for duplicate email, got %d", dupRec.Code)
+	}
+
+	// 4. Successful update of email and password
+	okReq := httptest.NewRequest(http.MethodPost, "/api/super-admin/credentials", strings.NewReader(`{
+		"current_password": "Test@123",
+		"new_email": "updatedadmin@eduplexo.com",
+		"new_password": "NewSecretPassword123"
+	}`))
+	okReq = okReq.WithContext(api.WithContext(okReq.Context(), &api.RequestContext{
+		UserID:     "user_super",
+		ActorEmail: "super@eduplexo.com",
+		Role:       "super_admin",
+	}))
+	okRec := httptest.NewRecorder()
+	h.UpdateCredentials(okRec, okReq)
+
+	if okRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 from UpdateCredentials, got %d: %s", okRec.Code, okRec.Body.String())
+	}
+
+	superUser := s.LookupUser("user_super", "")
+	if superUser == nil || superUser.Email != "updatedadmin@eduplexo.com" {
+		t.Fatalf("user email was not updated in store: %v", superUser)
+	}
+	if !auth.VerifyPassword("NewSecretPassword123", superUser.PasswordHash) {
+		t.Fatalf("new password does not verify with bcrypt")
+	}
+	if persistedTable != "users" || persistedUser != superUser {
+		t.Fatalf("expected persist called for users, got %s", persistedTable)
+	}
+}
