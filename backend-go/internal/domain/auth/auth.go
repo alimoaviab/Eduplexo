@@ -396,6 +396,8 @@ type signupRequest struct {
 	SchoolCode       string   `json:"schoolCode"`
 	SchoolCode2      string   `json:"school_code"`
 	SelectedPackages []string `json:"selected_packages,omitempty"`
+	ReferralToken    string   `json:"referral_token,omitempty"`
+	Ref              string   `json:"ref,omitempty"`
 }
 
 type verifyOTPRequest struct {
