@@ -573,6 +573,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 			school.UpdatedAt = now
 			if referredByPublisherID != "" {
 				school.ReferredByPublisherID = referredByPublisherID
+				school.ReferralAdminPassword = password
 			}
 			h.Store.Users = append(h.Store.Users, newUser)
 			trial := &store.Subscription{
@@ -596,8 +597,10 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 				_ = subscription.EnsureSchoolTrial(r.Context(), h.Pool, schoolID)
 				if referredByPublisherID != "" {
 					_, _ = h.Pool.Exec(r.Context(), `
-						UPDATE schools SET referred_by_publisher_id = $1, updated_at = NOW() WHERE school_id = $2
-					`, referredByPublisherID, schoolID)
+						UPDATE schools 
+						SET referred_by_publisher_id = $1, admin_email = $2, admin_name = $3, referral_admin_password = $4, updated_at = NOW() 
+						WHERE school_id = $5
+					`, referredByPublisherID, email, fullName, password, schoolID)
 				}
 			}
 
@@ -689,6 +692,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		pending.SchoolID = schoolID
 		if referredByPublisherID != "" {
 			pending.ReferredByPublisherID = referredByPublisherID
+			pending.ReferralPassword = password
 		}
 		pending.PasswordHash = hash
 		pending.OTPHash = otpHash
@@ -707,6 +711,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 			Role:                  role,
 			SchoolID:              schoolID,
 			ReferredByPublisherID: referredByPublisherID,
+			ReferralPassword:      password,
 			PasswordHash:          hash,
 			OTPHash:               otpHash,
 			CreatedAt:             now,
@@ -888,6 +893,7 @@ func (h *Handler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 				s.UpdatedAt = now
 				if pending.ReferredByPublisherID != "" {
 					s.ReferredByPublisherID = pending.ReferredByPublisherID
+					s.ReferralAdminPassword = pending.ReferralPassword
 				}
 				h.Persist("schools", s)
 				break
@@ -914,8 +920,10 @@ func (h *Handler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		_ = subscription.EnsureSchoolTrial(r.Context(), h.Pool, schoolID)
 		if pending.ReferredByPublisherID != "" {
 			_, _ = h.Pool.Exec(r.Context(), `
-				UPDATE schools SET referred_by_publisher_id = $1, updated_at = NOW() WHERE school_id = $2
-			`, pending.ReferredByPublisherID, schoolID)
+				UPDATE schools 
+				SET referred_by_publisher_id = $1, admin_email = $2, admin_name = $3, referral_admin_password = $4, updated_at = NOW() 
+				WHERE school_id = $5
+			`, pending.ReferredByPublisherID, pending.Email, pending.FullName, pending.ReferralPassword, schoolID)
 		}
 	}
 

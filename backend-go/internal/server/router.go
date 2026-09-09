@@ -204,6 +204,9 @@ func Router(cfg config.Config, s *store.MemStore, pg *persistence.Persister, rdb
 			// ─── Publisher Portal ────────────────────────────────────────────
 			r.Get("/publisher/me", authH.PublisherMe)
 			r.Get("/publisher/dashboard", authH.PublisherDashboard)
+			r.Get("/publisher/schools/{id}", authH.PublisherSchoolDetail)
+			r.Patch("/publisher/schools/{id}/password", authH.PublisherUpdateSchoolPassword)
+			r.Post("/publisher/schools/{id}/password", authH.PublisherUpdateSchoolPassword)
 
 			// School campuses listing (scoped to caller's school context)
 			r.Get("/campuses", func(w http.ResponseWriter, r *http.Request) {
