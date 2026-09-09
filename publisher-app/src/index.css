@@ -1,7 +1,7 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  background-color: rgb(248 250 252);
+  color: rgb(15 23 42);
+  -webkit-font-smoothing: antialiased;
 }
